@@ -15,6 +15,7 @@ import android.media.MediaPlayer;
 import android.media.MediaMetadataRetriever;
 import android.media.audiofx.Equalizer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -61,7 +62,7 @@ public class MainActivity extends Activity {
 
     static class Song {
         long id, albumId, fecha;
-        String title, artist, path;
+        String title, artist, album, path;
         int dur;
     }
 
@@ -414,11 +415,13 @@ public class MainActivity extends Activity {
             r.setDataSource(s.path);
             String t = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
             String a = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+            String al = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
             byte[] pic = r.getEmbeddedPicture();
             try { r.release(); } catch (Exception e) {}
             if (t != null && t.trim().length() > 0) { s.title = t; txtTitle.setText(t); }
             if (a != null && a.trim().length() > 0) { s.artist = a; txtArtist.setText(a); }
             else txtArtist.setText("Desconocido");
+            if (al != null && al.trim().length() > 0) s.album = al;
             if (pic != null) bmp = BitmapFactory.decodeByteArray(pic, 0, pic.length);
         } catch (Exception e) {}
         if (bmp == null && artCache.containsKey(s.path)) {
