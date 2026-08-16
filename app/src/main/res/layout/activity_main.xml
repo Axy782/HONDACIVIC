@@ -11,13 +11,40 @@
         android:layout_height="match_parent">
 
         <!-- Carátula ocupando TODA la pantalla -->
+        <!-- Fondo: misma carátula borrosa y oscurecida -->
+        <ImageView
+            android:id="@+id/artBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:background="@color/bg"/>
+        <View
+            android:id="@+id/artScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#66000000"/>
+
+        <com.euroaluminio.reproductor.VisualizerView
+            android:id="@+id/vizBg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"/>
+
+        <!-- Carátula COMPLETA centrada (sin recortar) -->
         <ImageView
             android:id="@+id/art"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:src="@android:color/transparent"
-            android:background="@color/surface2"/>
+            android:scaleType="fitCenter"
+            android:paddingTop="8dp"
+            android:paddingBottom="70dp"
+            android:src="@android:color/transparent"/>
+
+        <com.euroaluminio.reproductor.ParticlesView
+            android:id="@+id/particulas"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"/>
 
         <!-- Botones de arriba -->
         <Button
@@ -32,6 +59,18 @@
             android:textSize="15sp"
             android:background="#77000000"/>
         <Button
+            android:id="@+id/btnVis"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_gravity="top|left"
+            android:layout_marginLeft="12dp"
+            android:layout_marginTop="62dp"
+            android:text="◉ Vista"
+            android:textColor="@color/accent"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:background="#77000000"/>
+        <Button
             android:id="@+id/btnAbrirLista"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
@@ -43,128 +82,83 @@
             android:textSize="15sp"
             android:background="#77000000"/>
 
-        <!-- Panel de abajo transparente (encima de la carátula) -->
+        <!-- Panel de abajo estilo Poweramp: controles a la izquierda, info a la derecha -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
             android:orientation="vertical"
-            android:background="#88000000"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
+            android:background="#77000000"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
             android:paddingTop="6dp"
             android:paddingBottom="4dp">
 
-            <!-- Título + fav + lista -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:paddingBottom="4dp">
+                android:gravity="center_vertical">
+
+                <!-- IZQUIERDA: controles (iconos blancos) -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <Button android:id="@+id/btnShuffle" android:layout_width="wrap_content" android:layout_height="38dp"
+                        android:text="Aleat." android:textSize="10sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
+                    <ImageButton android:id="@+id/btnPrev" android:layout_width="44dp" android:layout_height="44dp"
+                        android:src="@android:drawable/ic_media_previous" android:background="@android:color/transparent"/>
+                    <ImageButton android:id="@+id/btnPlay" android:layout_width="54dp" android:layout_height="54dp"
+                        android:src="@android:drawable/ic_media_play" android:background="@android:color/transparent"/>
+                    <ImageButton android:id="@+id/btnNext" android:layout_width="44dp" android:layout_height="44dp"
+                        android:src="@android:drawable/ic_media_next" android:background="@android:color/transparent"/>
+                    <Button android:id="@+id/btnRepeat" android:layout_width="wrap_content" android:layout_height="38dp"
+                        android:text="Repetir" android:textSize="10sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
+                </LinearLayout>
+
+                <!-- DERECHA: info + acciones -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical">
-                    <TextView
-                        android:id="@+id/title"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Sonido JFV"
-                        android:textColor="@color/text"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:singleLine="true"
-                        android:ellipsize="end"
-                        android:shadowColor="#000000"
-                        android:shadowDx="0"
-                        android:shadowDy="1"
-                        android:shadowRadius="6"/>
-                    <TextView
-                        android:id="@+id/artist"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Desliza ← → para cambiar canción"
-                        android:textColor="#E0E0E8"
-                        android:textSize="13sp"
-                        android:singleLine="true"
-                        android:ellipsize="end"
-                        android:shadowColor="#000000"
-                        android:shadowDx="0"
-                        android:shadowDy="1"
-                        android:shadowRadius="6"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:orientation="horizontal" android:gravity="center_vertical">
+                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                            <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                                android:text="Sonido JFV" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold"
+                                android:singleLine="true" android:ellipsize="end"
+                                android:shadowColor="#000000" android:shadowDx="0" android:shadowDy="1" android:shadowRadius="6"/>
+                            <TextView android:id="@+id/artist" android:layout_width="match_parent" android:layout_height="wrap_content"
+                                android:text="Desliza para cambiar canción" android:textColor="#E0E0E8" android:textSize="12sp"
+                                android:singleLine="true" android:ellipsize="end"
+                                android:shadowColor="#000000" android:shadowDx="0" android:shadowDy="1" android:shadowRadius="6"/>
+                        </LinearLayout>
+                        <Button android:id="@+id/btnFav" android:layout_width="42dp" android:layout_height="42dp"
+                            android:text="★" android:textSize="16sp" android:textColor="#FFFFFF" android:background="#33FFFFFF"/>
+                        <Button android:id="@+id/btnMasLista" android:layout_width="wrap_content" android:layout_height="42dp"
+                            android:text="+ Lista" android:textStyle="bold" android:textColor="#FFFFFF" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
+                        <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="42dp"
+                            android:text="EQ" android:textColor="#FFFFFF" android:textStyle="bold" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
+                    </LinearLayout>
+
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="2dp">
+                        <TextView android:id="@+id/tCur" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="0:00" android:textColor="#E0E0E8" android:textSize="10sp"/>
+                        <SeekBar android:id="@+id/seek" android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1" android:layout_marginLeft="6dp" android:layout_marginRight="6dp"/>
+                        <TextView android:id="@+id/tDur" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="0:00" android:textColor="#E0E0E8" android:textSize="10sp"/>
+                    </LinearLayout>
                 </LinearLayout>
-                <Button
-                    android:id="@+id/btnFav"
-                    android:layout_width="46dp"
-                    android:layout_height="46dp"
-                    android:text="★"
-                    android:textSize="16sp"
-                    android:textColor="@color/muted"
-                    android:background="#55FFFFFF"/>
-                <Button
-                    android:id="@+id/btnMasLista"
-                    android:layout_width="wrap_content"
-                    android:layout_height="46dp"
-                    android:text="+ Lista"
-                    android:textStyle="bold"
-                    android:textColor="#0A0A0E"
-                    android:background="@color/accent"
-                    android:layout_marginLeft="8dp"/>
             </LinearLayout>
 
-            <!-- Progreso -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView android:id="@+id/tCur" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="0:00" android:textColor="#E0E0E8" android:textSize="10sp"/>
-                <SeekBar android:id="@+id/seek" android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1" android:layout_marginLeft="6dp" android:layout_marginRight="6dp"/>
-                <TextView android:id="@+id/tDur" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="0:00" android:textColor="#E0E0E8" android:textSize="10sp"/>
-            </LinearLayout>
-
-            <!-- Controles -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <Button android:id="@+id/btnShuffle" android:layout_width="0dp" android:layout_height="40dp"
-                    android:layout_weight="1" android:text="Aleat." android:textSize="10sp"
-                    android:textColor="#E0E0E8" android:background="@android:color/transparent"/>
-                <ImageButton android:id="@+id/btnPrev" android:layout_width="0dp" android:layout_height="42dp"
-                    android:layout_weight="1" android:src="@android:drawable/ic_media_previous"
-                    android:background="@android:color/transparent"/>
-                <ImageButton android:id="@+id/btnPlay" android:layout_width="0dp" android:layout_height="44dp"
-                    android:layout_weight="1.2" android:src="@android:drawable/ic_media_play"
-                    android:background="@color/accent"/>
-                <ImageButton android:id="@+id/btnNext" android:layout_width="0dp" android:layout_height="42dp"
-                    android:layout_weight="1" android:src="@android:drawable/ic_media_next"
-                    android:background="@android:color/transparent"/>
-                <Button android:id="@+id/btnRepeat" android:layout_width="0dp" android:layout_height="40dp"
-                    android:layout_weight="1" android:text="Repetir" android:textSize="10sp"
-                    android:textColor="#E0E0E8" android:background="@android:color/transparent"/>
-                <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="40dp"
-                    android:text="EQ" android:textColor="@color/accent" android:textStyle="bold"
-                    android:background="#55FFFFFF" android:layout_marginLeft="4dp"/>
-            </LinearLayout>
-
-            <!-- Volumen (sincronizado con el volante del carro) -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Vol" android:textColor="#E0E0E8" android:textSize="10sp"/>
-                <SeekBar android:id="@+id/vol" android:layout_width="0dp" android:layout_height="wrap_content"
-                    android:layout_weight="1" android:layout_marginLeft="8dp"/>
-            </LinearLayout>
+            <!-- Volumen fino (se mueve con el volante) -->
+            <SeekBar android:id="@+id/vol" android:layout_width="match_parent" android:layout_height="wrap_content"/>
         </LinearLayout>
     </FrameLayout>
 
@@ -231,7 +225,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v24" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">

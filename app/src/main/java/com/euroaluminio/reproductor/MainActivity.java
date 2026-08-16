@@ -21,6 +21,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.media.audiofx.Visualizer;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -86,13 +87,24 @@ public class MainActivity extends Activity {
     private MediaPlayer mp;
     private Equalizer eq;
     private AudioManager am;
+    private AudioManager.OnAudioFocusChangeListener focoListener = new AudioManager.OnAudioFocusChangeListener() {
+        public void onAudioFocusChange(int f) {
+            if (f == AudioManager.AUDIOFOCUS_LOSS || f == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                try { if (mp != null && prepared && mp.isPlaying()) { mp.pause(); pintarPlay(false); } } catch (Exception e) {}
+            }
+        }
+    };
+    private void pedirFoco() { try { am.requestAudioFocus(focoListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN); } catch (Exception e) {} }
 
     private boolean shuffle = false;
     private int repeat = 0;
     private boolean prepared = false;
     private boolean noAutoStart = false;
+    private int animDir = 0;   // 1 siguiente, -1 anterior, 0 sin animación
 
     private ImageView imgArt;
+    private ImageView imgArtBg;
+    private View artScrim;
     private TextView txtTitle, txtArtist, txtCur, txtDur, txtCount;
     private SeekBar seek, vol;
     private ImageButton btnPlay, btnPrev, btnNext;
@@ -125,6 +137,10 @@ public class MainActivity extends Activity {
     private android.content.BroadcastReceiver netReceiver = null;
     private android.database.ContentObserver volObserver = null;
     private boolean descargaEnCurso = false;
+    private VisualizerView vizBg = null;
+    private ParticlesView particles = null;
+    private boolean efectosOn = true;
+    private Visualizer visualizer = null;
 
     private final Handler handler = new Handler();
     private SharedPreferences prefs;
@@ -141,6 +157,8 @@ public class MainActivity extends Activity {
         am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
         imgArt = (ImageView) findViewById(R.id.art);
+        imgArtBg = (ImageView) findViewById(R.id.artBg);
+        artScrim = findViewById(R.id.artScrim);
         txtTitle = (TextView) findViewById(R.id.title);
         txtArtist = (TextView) findViewById(R.id.artist);
         txtCur = (TextView) findViewById(R.id.tCur);
@@ -151,6 +169,7 @@ public class MainActivity extends Activity {
         btnPlay = (ImageButton) findViewById(R.id.btnPlay);
         btnPrev = (ImageButton) findViewById(R.id.btnPrev);
         btnNext = (ImageButton) findViewById(R.id.btnNext);
+        try { btnPrev.setColorFilter(0xFFFFFFFF); btnNext.setColorFilter(0xFFFFFFFF); btnPlay.setColorFilter(0xFFFFFFFF); } catch (Exception e) {}
         btnShuffle = (Button) findViewById(R.id.btnShuffle);
         btnRepeat = (Button) findViewById(R.id.btnRepeat);
         btnEq = (Button) findViewById(R.id.btnEq);
@@ -182,6 +201,7 @@ public class MainActivity extends Activity {
         optPausaUsb = prefs.getBoolean("pausaUsb", false);
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque", true);
+        efectosOn = prefs.getBoolean("efectos", true);
         aplicarTema();
 
         findViewById(R.id.btnAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
@@ -233,6 +253,17 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+
+        // ---- Efectos (partículas + anillos) ----
+        vizBg = (VisualizerView) findViewById(R.id.vizBg);
+        if (vizBg != null) { vizBg.setTipo(1); vizBg.setColor(accent); }
+        particles = (ParticlesView) findViewById(R.id.particulas);
+        if (particles != null) particles.setColor(accent);
+        findViewById(R.id.btnVis).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            efectosOn = !efectosOn; prefs.edit().putBoolean("efectos", efectosOn).apply();
+            aplicarEfectos();
+            Toast.makeText(MainActivity.this, efectosOn ? "Efectos activados" : "Efectos desactivados", Toast.LENGTH_SHORT).show();
+        }});
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
             public boolean onItemLongClick(AdapterView<?> p, View v, int position, long id){
                 if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista) { quitarDeListaActual(position); return true; }
@@ -463,8 +494,44 @@ public class MainActivity extends Activity {
         if (bmp == null && artCache.containsKey(s.path)) {
             try { byte[] c = artCache.get(s.path); bmp = BitmapFactory.decodeByteArray(c, 0, c.length); } catch (Exception e) {}
         }
-        if (bmp != null) imgArt.setImageBitmap(bmp);
-        else imgArt.setImageDrawable(new ColorDrawable(0xFF262633));
+        if (bmp != null) {
+            imgArt.setImageBitmap(bmp);
+            try {
+                Bitmap chico = Bitmap.createScaledBitmap(bmp, 24, 24, true);  // desenfoque barato
+                imgArtBg.setImageBitmap(chico);
+                imgArtBg.setBackgroundColor(0xFF06060A);
+            } catch (Exception e) { imgArtBg.setImageDrawable(null); }
+            artScrim.setVisibility(View.VISIBLE);
+        } else {
+            imgArt.setImageDrawable(new ColorDrawable(0x00000000));
+            try {
+                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, gradienteDe(s));
+                imgArtBg.setImageDrawable(null);
+                imgArtBg.setBackgroundDrawable(g);
+            } catch (Exception e) { imgArtBg.setBackgroundColor(0xFF262633); }
+            artScrim.setVisibility(View.GONE);
+        }
+        if (animDir != 0) {
+            try {
+                int w = imgArt.getWidth(); if (w <= 0) w = 400;
+                android.view.animation.AnimationSet set = new android.view.animation.AnimationSet(true);
+                // deslizamiento
+                android.view.animation.TranslateAnimation ta = new android.view.animation.TranslateAnimation(animDir * w * 0.6f, 0, 0, 0);
+                // giro tipo 3D (escala horizontal de 0 a 1 = efecto de "abrir" girando)
+                android.view.animation.ScaleAnimation sa = new android.view.animation.ScaleAnimation(
+                    0.3f, 1f, 0.85f, 1f,
+                    android.view.animation.Animation.RELATIVE_TO_SELF, animDir == 1 ? 0f : 1f,
+                    android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+                android.view.animation.AlphaAnimation aa = new android.view.animation.AlphaAnimation(0.2f, 1f);
+                set.addAnimation(ta); set.addAnimation(sa); set.addAnimation(aa);
+                set.setDuration(340);
+                set.setInterpolator(new android.view.animation.DecelerateInterpolator());
+                imgArt.startAnimation(set);
+                if (imgArtBg != null) { android.view.animation.AlphaAnimation ab = new android.view.animation.AlphaAnimation(0.4f, 1f); ab.setDuration(340); imgArtBg.startAnimation(ab); }
+            } catch (Exception e) {}
+            animDir = 0;
+        }
     }
 
     private void construirOrden() {
@@ -563,7 +630,7 @@ public class MainActivity extends Activity {
     private void pintarFav() {
         Button b = (Button) findViewById(R.id.btnFav); Song s = cancionActual(); boolean fav = false;
         if (s != null) fav = enAlgunaLista(s.path);
-        b.setTextColor(fav ? accent : 0xFF8B8B9A);
+        b.setTextColor(fav ? accent : 0xFFFFFFFF);
     }
     private void toggleFav() {
         Song s = cancionActual(); if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
@@ -682,7 +749,8 @@ public class MainActivity extends Activity {
                     txtDur.setText(fmt(m.getDuration()));
                     configurarEq();
                     if (noAutoStart) { noAutoStart = false; pintarPlay(false); }
-                    else { m.start(); pintarPlay(true); handler.post(actualizador); }
+                    else { pedirFoco(); m.start(); pintarPlay(true); handler.post(actualizador); }
+                    attachVisualizer();
                 }
             });
             mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
@@ -709,7 +777,7 @@ public class MainActivity extends Activity {
             return;
         }
         if (mp.isPlaying()) { mp.pause(); pintarPlay(false); }
-        else { mp.start(); pintarPlay(true); handler.post(actualizador); }
+        else { pedirFoco(); mp.start(); pintarPlay(true); handler.post(actualizador); }
     }
 
     private void siguiente(boolean auto) {
@@ -717,6 +785,7 @@ public class MainActivity extends Activity {
         if (repeat == 2 && auto) { if (mp != null) { mp.seekTo(0); mp.start(); } return; }
         if (posEnOrden < order.size() - 1) posEnOrden++;
         else { if (repeat == 1 || !auto) posEnOrden = 0; else { pintarPlay(false); return; } }
+        animDir = 1;
         cargarYReproducir();
     }
 
@@ -724,6 +793,7 @@ public class MainActivity extends Activity {
         if (order.isEmpty()) return;
         if (mp != null && prepared && mp.getCurrentPosition() > 3000) { mp.seekTo(0); return; }
         if (posEnOrden > 0) posEnOrden--; else posEnOrden = order.size() - 1;
+        animDir = -1;
         cargarYReproducir();
     }
 
@@ -980,21 +1050,51 @@ public class MainActivity extends Activity {
             && songs.get(order.get(posEnOrden)).path.equals(s.path)) { cargarMetadatosActual(s); }
     }
     private byte[] descargarArt(Song s) {
+        String base = ((s.artist != null && s.artist.length() > 0 ? s.artist + " " : "")
+            + (s.album != null && s.album.length() > 0 ? s.album : s.title)).trim();
+        if (base.length() == 0) return null;
+        byte[] r = artDeItunes(base); if (r != null) return r;
+        r = artDeDeezer(base);      if (r != null) return r;
+        r = artDeMusicBrainz(base); if (r != null) return r;
+        return null;
+    }
+    private String pxCal() { return optCalidad.equals("maxima") ? "1200x1200" : optCalidad.equals("normal") ? "300x300" : "600x600"; }
+    private byte[] artDeItunes(String term) {
         try {
-            String base = ((s.artist != null && s.artist.length() > 0 ? s.artist + " " : "")
-                + (s.album != null && s.album.length() > 0 ? s.album : s.title)).trim();
-            if (base.length() == 0) return null;
-            String url = "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + URLEncoder.encode(base, "UTF-8");
-            String json = httpGet(url);
-            if (json == null) return null;
-            org.json.JSONObject o = new org.json.JSONObject(json);
-            org.json.JSONArray arr = o.optJSONArray("results");
+            String url = "http://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + URLEncoder.encode(term, "UTF-8");
+            String json = httpGet(url); if (json == null) return null;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
             if (arr == null || arr.length() == 0) return null;
             String art = arr.getJSONObject(0).optString("artworkUrl100", "");
             if (art.length() == 0) return null;
-            String px = optCalidad.equals("maxima")?"1200x1200":optCalidad.equals("normal")?"300x300":"600x600";
-            art = art.replace("100x100", px);
+            art = art.replace("100x100", pxCal()).replace("https://", "http://").replace("-ssl.mzstatic.com", ".mzstatic.com");
             return httpGetBytes(art);
+        } catch (Exception e) { return null; }
+    }
+    private byte[] artDeDeezer(String term) {
+        try {
+            String url = "http://api.deezer.com/search?limit=1&q=" + URLEncoder.encode(term, "UTF-8");
+            String json = httpGet(url); if (json == null) return null;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("data");
+            if (arr == null || arr.length() == 0) return null;
+            org.json.JSONObject alb = arr.getJSONObject(0).optJSONObject("album");
+            if (alb == null) return null;
+            String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
+            String art = alb.optString(key, alb.optString("cover_big", alb.optString("cover", "")));
+            if (art.length() == 0) return null;
+            return httpGetBytes(art.replace("https://", "http://"));
+        } catch (Exception e) { return null; }
+    }
+    private byte[] artDeMusicBrainz(String term) {
+        try {
+            String url = "http://musicbrainz.org/ws/2/release/?fmt=json&limit=1&query=" + URLEncoder.encode(term, "UTF-8");
+            String json = httpGet(url); if (json == null) return null;
+            org.json.JSONArray rel = new org.json.JSONObject(json).optJSONArray("releases");
+            if (rel == null || rel.length() == 0) return null;
+            String mbid = rel.getJSONObject(0).optString("id", "");
+            if (mbid.length() == 0) return null;
+            String size = optCalidad.equals("normal") ? "250" : "500";
+            return httpGetBytes("http://coverartarchive.org/release/" + mbid + "/front-" + size);
         } catch (Exception e) { return null; }
     }
     private String httpGet(String u) {
@@ -1095,17 +1195,37 @@ public class MainActivity extends Activity {
         return o.toByteArray();
     }
 
+    private void aplicarEfectos() {
+        boolean sonando = (mp != null && prepared && mp.isPlaying());
+        try { if (particles != null) { if (efectosOn && sonando) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
+        try { if (vizBg != null) { if (efectosOn && sonando) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
+    }
+    private void attachVisualizer() {
+        try {
+            if (visualizer != null) { try { visualizer.release(); } catch (Exception e) {} visualizer = null; }
+            if (mp == null) return;
+            visualizer = new Visualizer(mp.getAudioSessionId());
+            visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
+            visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+                public void onWaveFormDataCapture(Visualizer v, byte[] wave, int rate) {}
+                public void onFftDataCapture(Visualizer v, byte[] data, int rate) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); }
+            }, Visualizer.getMaxCaptureRate() / 2, false, true);
+            visualizer.setEnabled(true);
+        } catch (Throwable t) { visualizer = null; }  // en radios viejos puede fallar: usa animación por tiempo
+    }
+
     private void aplicarTema() {
         if (optTema.equals("azul")) accent = 0xFF3B82F6;
         else if (optTema.equals("rojo")) accent = 0xFFEF4444;
         else if (optTema.equals("verde")) accent = 0xFF22C55E;
         else accent = 0xFFFFB020;
-        try { findViewById(R.id.btnPlay).setBackgroundColor(accent); } catch (Exception e) {}
-        try { findViewById(R.id.btnMasLista).setBackgroundColor(accent); } catch (Exception e) {}
-        try { ((Button) findViewById(R.id.btnEq)).setTextColor(accent); } catch (Exception e) {}
+        try { findViewById(R.id.btnPlay).setBackgroundColor(0x00000000); } catch (Exception e) {}
+        try { ((Button) findViewById(R.id.btnEq)).setTextColor(0xFFFFFFFF); } catch (Exception e) {}
         try { pintarFav(); } catch (Exception e) {}
         try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
         try { pintarSegCalidad(); pintarSegOrden(); } catch (Exception e) {}
+        try { if (vizBg != null) vizBg.setColor(accent); } catch (Exception e) {}
+        try { if (particles != null) particles.setColor(accent); } catch (Exception e) {}
     }
     private void pintarSegCalidad() {
         int[] ids = { R.id.calNormal, R.id.calAlta, R.id.calMaxima };
@@ -1198,22 +1318,44 @@ public class MainActivity extends Activity {
                 final ArrayList<String> urls = new ArrayList<String>();
                 final boolean[] falloRed = { false };
                 try {
-                    String url = "https://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + URLEncoder.encode(term, "UTF-8");
+                    String px = pxCal();
+                    // Apple / iTunes
+                    String url = "http://itunes.apple.com/search?media=music&entity=song&limit=6&term=" + URLEncoder.encode(term, "UTF-8");
                     String json = httpGet(url);
                     if (json == null) { falloRed[0] = true; }
                     else {
                         org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
                         if (arr != null) {
-                            String px = optCalidad.equals("maxima") ? "1200x1200" : optCalidad.equals("normal") ? "300x300" : "600x600";
                             for (int i = 0; i < arr.length(); i++) {
                                 org.json.JSONObject o = arr.getJSONObject(i);
                                 String a = o.optString("artworkUrl100", "");
                                 if (a.length() == 0) continue;
-                                labels.add(o.optString("trackName", "?") + " - " + o.optString("artistName", ""));
-                                urls.add(a.replace("100x100", px));
+                                labels.add("[Apple] " + o.optString("trackName", "?") + " - " + o.optString("artistName", ""));
+                                urls.add(a.replace("100x100", px).replace("https://", "http://").replace("-ssl.mzstatic.com", ".mzstatic.com"));
                             }
                         }
                     }
+                    // Deezer
+                    try {
+                        String url2 = "http://api.deezer.com/search?limit=6&q=" + URLEncoder.encode(term, "UTF-8");
+                        String json2 = httpGet(url2);
+                        if (json2 != null) {
+                            org.json.JSONArray arr2 = new org.json.JSONObject(json2).optJSONArray("data");
+                            if (arr2 != null) {
+                                String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
+                                for (int i = 0; i < arr2.length(); i++) {
+                                    org.json.JSONObject o = arr2.getJSONObject(i);
+                                    org.json.JSONObject alb = o.optJSONObject("album");
+                                    if (alb == null) continue;
+                                    String a = alb.optString(key, alb.optString("cover_big", ""));
+                                    if (a.length() == 0) continue;
+                                    org.json.JSONObject art2 = o.optJSONObject("artist");
+                                    labels.add("[Deezer] " + o.optString("title", "?") + " - " + (art2 != null ? art2.optString("name", "") : ""));
+                                    urls.add(a.replace("https://", "http://"));
+                                }
+                            }
+                        }
+                    } catch (Exception e2) {}
                 } catch (Exception e) { falloRed[0] = true; }
                 runOnUiThread(new Runnable() {
                     public void run() {
@@ -1284,9 +1426,25 @@ public class MainActivity extends Activity {
         }).setNegativeButton("Cancelar", null).show();
     }
 
+    private android.graphics.drawable.GradientDrawable circulo(int color) {
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        d.setColor(color);
+        return d;
+    }
+    private int[] gradienteDe(Song s) {
+        int h = ((s.title == null ? "" : s.title) + (s.artist == null ? "" : s.artist)).hashCode();
+        int[][] pal = {
+            { 0xFF1E6E5A, 0xFF06121A }, { 0xFF6E1E5A, 0xFF190712 }, { 0xFF1E3A6E, 0xFF06101A },
+            { 0xFF6E4A1E, 0xFF191207 }, { 0xFF3A1E6E, 0xFF0C0719 }, { 0xFF1E6E3A, 0xFF06190C }
+        };
+        return pal[Math.abs(h) % pal.length];
+    }
     private void pintarPlay(boolean playing) {
         btnPlay.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
         if (playing) tomarWake(); else liberarWake();
+        try { if (particles != null) { if (efectosOn && playing) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
+        try { if (vizBg != null) { if (efectosOn && playing) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
     }
     private void pintarShuffle() {
         btnShuffle.setTextColor(shuffle ? accent : 0xFF8B8B9A);
@@ -1396,6 +1554,9 @@ public class MainActivity extends Activity {
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}
         try { if (volObserver != null) getContentResolver().unregisterContentObserver(volObserver); } catch (Exception e) {}
+        try { if (visualizer != null) visualizer.release(); } catch (Exception e) {}
+        try { if (vizBg != null) vizBg.parar(); } catch (Exception e) {}
+        try { if (particles != null) particles.parar(); } catch (Exception e) {}
         liberarWake();
         try { if (eq != null) eq.release(); } catch (Exception e) {}
         try { if (mp != null) mp.release(); } catch (Exception e) {}
