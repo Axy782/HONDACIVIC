@@ -12,9 +12,11 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.MediaMetadataRetriever;
 import android.media.audiofx.Equalizer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
 import android.view.Gravity;
@@ -38,6 +40,11 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.io.File;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.HashSet;
 
 public class MainActivity extends Activity {
 
@@ -144,50 +151,110 @@ public class MainActivity extends Activity {
         escanearMusica();
     }
 
+    private static final int MAX_DEPTH = 9;
+
     private void escanearMusica() {
-        songs.clear();
-        try {
-            Uri uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-            String[] cols = {
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM_ID,
-                MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.IS_MUSIC
-            };
-            Cursor c = getContentResolver().query(uri, cols, null, null,
-                MediaStore.Audio.Media.TITLE + " ASC");
-            if (c != null) {
-                int iId = c.getColumnIndex(MediaStore.Audio.Media._ID);
-                int iTit = c.getColumnIndex(MediaStore.Audio.Media.TITLE);
-                int iArt = c.getColumnIndex(MediaStore.Audio.Media.ARTIST);
-                int iAlb = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID);
-                int iDat = c.getColumnIndex(MediaStore.Audio.Media.DATA);
-                int iDur = c.getColumnIndex(MediaStore.Audio.Media.DURATION);
-                int iMus = c.getColumnIndex(MediaStore.Audio.Media.IS_MUSIC);
-                while (c.moveToNext()) {
-                    if (iMus >= 0 && c.getInt(iMus) == 0) continue;
-                    Song s = new Song();
-                    s.id = c.getLong(iId);
-                    s.title = c.getString(iTit);
-                    s.artist = c.getString(iArt);
-                    s.albumId = iAlb >= 0 ? c.getLong(iAlb) : 0;
-                    s.path = c.getString(iDat);
-                    s.dur = iDur >= 0 ? c.getInt(iDur) : 0;
-                    if (s.title == null) s.title = "(sin nombre)";
-                    if (s.artist == null || s.artist.equals("<unknown>")) s.artist = "Desconocido";
-                    songs.add(s);
+        txtCount.setText("Buscando música…");
+        new Thread(new Runnable() {
+            public void run() {
+                final ArrayList<Song> found = new ArrayList<Song>();
+                Set<String> vistos = new HashSet<String>();
+                for (File root : raices()) {
+                    buscarAudio(root, found, vistos, 0);
                 }
-                c.close();
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        songs.clear();
+                        songs.addAll(found);
+                        construirOrden();
+                        adapter.notifyDataSetChanged();
+                        txtCount.setText(songs.isEmpty()
+                            ? "No se encontró música (revisa el USB)"
+                            : (songs.size() + " canciones"));
+                    }
+                });
             }
-        } catch (Exception e) {
-            Toast.makeText(this, "Error leyendo la musica", Toast.LENGTH_LONG).show();
+        }).start();
+    }
+
+    // Carpetas donde buscar: memoria interna, tarjetas y USB del carro
+    private ArrayList<File> raices() {
+        LinkedHashSet<String> paths = new LinkedHashSet<String>();
+        try { paths.add(Environment.getExternalStorageDirectory().getAbsolutePath()); } catch (Exception e) {}
+        try { String sec = System.getenv("SECONDARY_STORAGE"); if (sec != null) for (String p : sec.split(":")) paths.add(p); } catch (Exception e) {}
+        try { String ext = System.getenv("EXTERNAL_STORAGE"); if (ext != null) paths.add(ext); } catch (Exception e) {}
+        String[] comunes = {
+            "/storage", "/mnt", "/mnt/usb", "/mnt/usbhost", "/mnt/usbhost1", "/mnt/usbhost0",
+            "/mnt/usb_storage", "/mnt/usb1", "/mnt/sdcard/usbStorage", "/mnt/media_rw",
+            "/storage/usb", "/storage/usbdisk", "/storage/UsbDriveA", "/storage/usbotg",
+            "/udisk", "/mnt/udisk", "/mnt/sda", "/mnt/sda1", "/mnt/ext_sdcard"
+        };
+        for (String p : comunes) paths.add(p);
+        ArrayList<File> r = new ArrayList<File>();
+        for (String p : paths) {
+            try { File f = new File(p); if (f.exists() && f.canRead()) r.add(f); } catch (Exception e) {}
         }
-        construirOrden();
-        adapter.notifyDataSetChanged();
-        txtCount.setText(songs.isEmpty() ? "No se encontro musica en el equipo" : (songs.size() + " canciones"));
+        return r;
+    }
+
+    private void buscarAudio(File dir, ArrayList<Song> out, Set<String> vistos, int depth) {
+        if (dir == null || depth > MAX_DEPTH || out.size() > 5000) return;
+        File[] hijos;
+        try { hijos = dir.listFiles(); } catch (Exception e) { return; }
+        if (hijos == null) return;
+        for (File f : hijos) {
+            try {
+                if (f.isDirectory()) {
+                    String nm = f.getName();
+                    if (nm.startsWith(".") || nm.equalsIgnoreCase("Android")) continue;
+                    buscarAudio(f, out, vistos, depth + 1);
+                } else {
+                    String low = f.getName().toLowerCase(Locale.US);
+                    if (low.endsWith(".mp3") || low.endsWith(".m4a") || low.endsWith(".aac")
+                        || low.endsWith(".wav") || low.endsWith(".ogg") || low.endsWith(".flac")
+                        || low.endsWith(".wma") || low.endsWith(".opus")) {
+                        String path = f.getAbsolutePath();
+                        if (vistos.contains(path)) continue;
+                        vistos.add(path);
+                        Song s = new Song();
+                        s.path = path;
+                        s.title = limpiarNombre(f.getName());
+                        s.artist = "";
+                        s.dur = 0;
+                        s.albumId = 0;
+                        out.add(s);
+                    }
+                }
+            } catch (Exception e) {}
+        }
+    }
+
+    private String limpiarNombre(String n) {
+        if (n == null) return "(sin nombre)";
+        int dot = n.lastIndexOf('.');
+        if (dot > 0) n = n.substring(0, dot);
+        return n.replace('_', ' ').trim();
+    }
+
+    // Lee título/artista/carátula reales del archivo que suena
+    private void cargarMetadatosActual(Song s) {
+        txtTitle.setText(s.title);
+        txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+        Bitmap bmp = null;
+        try {
+            MediaMetadataRetriever r = new MediaMetadataRetriever();
+            r.setDataSource(s.path);
+            String t = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+            String a = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+            byte[] pic = r.getEmbeddedPicture();
+            try { r.release(); } catch (Exception e) {}
+            if (t != null && t.trim().length() > 0) { s.title = t; txtTitle.setText(t); }
+            if (a != null && a.trim().length() > 0) { s.artist = a; txtArtist.setText(a); }
+            else txtArtist.setText("Desconocido");
+            if (pic != null) bmp = BitmapFactory.decodeByteArray(pic, 0, pic.length);
+        } catch (Exception e) {}
+        if (bmp != null) imgArt.setImageBitmap(bmp);
+        else imgArt.setImageDrawable(new ColorDrawable(0xFF262633));
     }
 
     private void construirOrden() {
@@ -234,8 +301,8 @@ public class MainActivity extends Activity {
             return;
         }
         txtTitle.setText(s.title);
-        txtArtist.setText(s.artist);
-        cargarCaratula(s);
+        txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+        cargarMetadatosActual(s);
         adapter.notifyDataSetChanged();
         prefs.edit().putInt("last", order.get(posEnOrden)).apply();
     }
@@ -262,16 +329,6 @@ public class MainActivity extends Activity {
         if (mp != null && prepared && mp.getCurrentPosition() > 3000) { mp.seekTo(0); return; }
         if (posEnOrden > 0) posEnOrden--; else posEnOrden = order.size() - 1;
         cargarYReproducir();
-    }
-
-    private void cargarCaratula(Song s) {
-        Bitmap bmp = null;
-        try {
-            Uri artUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), s.albumId);
-            bmp = BitmapFactory.decodeStream(getContentResolver().openInputStream(artUri));
-        } catch (Exception e) { bmp = null; }
-        if (bmp != null) imgArt.setImageBitmap(bmp);
-        else imgArt.setImageDrawable(new ColorDrawable(0xFF1C1C26));
     }
 
     private final Runnable actualizador = new Runnable() {
@@ -441,7 +498,7 @@ public class MainActivity extends Activity {
             TextView d = (TextView) v.findViewById(R.id.rowDur);
             t.setText(s.title);
             a.setText(s.artist);
-            d.setText(fmt(s.dur));
+            d.setText(s.dur>0?fmt(s.dur):"");
             boolean isCur = posEnOrden >= 0 && posEnOrden < order.size() && order.get(posEnOrden) == i;
             t.setTextColor(isCur ? 0xFFFFB020 : 0xFFF4F4F8);
             return v;
