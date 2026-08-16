@@ -106,6 +106,7 @@ public class MainActivity extends Activity {
     private boolean optAuto = false, optEmbed = true;
     private String carpetaVinculada = null;
     private final java.util.HashMap<String, byte[]> artCache = new java.util.HashMap<String, byte[]>();
+    private final java.util.HashMap<String, android.graphics.Bitmap> portadas = new java.util.HashMap<String, android.graphics.Bitmap>();
     private ListView listExplorar;
     private android.widget.ArrayAdapter<String> expAdapter;
     private final ArrayList<String> expItems = new ArrayList<String>();
@@ -347,6 +348,7 @@ public class MainActivity extends Activity {
                         modo = 0; carpetaAbierta = null;
                         adapter.notifyDataSetChanged();
                         actualizarHeaderLista();
+                        calcularPortadasCarpetas();
                         if (optAuto && hayInternet() && !carpetas.isEmpty()) descargarFaltantes();
                         if (optResume) {
                             String lp = prefs.getString("lastPath", null);
@@ -520,7 +522,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.tabCarpetas).setBackgroundColor(t == 0 ? 0xFF262633 : 0xFF1C1C26);
         ((Button) findViewById(R.id.tabListas)).setTextColor(t == 1 ? accent : 0xFF8B8B9A);
         findViewById(R.id.tabListas).setBackgroundColor(t == 1 ? 0xFF262633 : 0xFF1C1C26);
-        if (t == 1) construirNombresListas();
+        if (t == 1) { construirNombresListas(); calcularPortadasListas(); }
         adapter.notifyDataSetChanged();
         list.setSelection(0);
         actualizarHeaderLista();
@@ -1303,20 +1305,36 @@ public class MainActivity extends Activity {
         public int getCount() { return modo == 0 ? (tab == 0 ? carpetas.size() : nombresListas.size()) : cancionesCarpeta.size(); }
         public Object getItem(int i) { return null; }
         public long getItemId(int i) { return i; }
+        public int getViewTypeCount() { return 2; }
+        public int getItemViewType(int i) { return modo == 0 ? 0 : 1; }
         public View getView(int i, View convertView, ViewGroup parent) {
+            int tipo = getItemViewType(i);
             View v = convertView;
-            if (v == null) v = getLayoutInflater().inflate(R.layout.row_song, parent, false);
-            TextView t = (TextView) v.findViewById(R.id.rowTitle);
-            TextView a = (TextView) v.findViewById(R.id.rowArtist);
-            TextView d = (TextView) v.findViewById(R.id.rowDur);
-            if (modo == 0 && tab == 0) {
-                Carpeta c = carpetas.get(i);
-                t.setText(c.name); a.setText(c.songs.size() + " canciones"); d.setText(""); t.setTextColor(0xFFF4F4F8);
-            } else if (modo == 0 && tab == 1) {
-                String n = nombresListas.get(i); int cnt = 0;
-                try { cnt = listas.getJSONArray(n).length(); } catch (Exception e) {}
-                t.setText((n.equals("Favoritas") ? "★ " : "") + n); a.setText(cnt + " canciones"); d.setText(""); t.setTextColor(0xFFF4F4F8);
+            if (v == null || ((Integer) (v.getTag() == null ? -1 : v.getTag())) != tipo) {
+                v = getLayoutInflater().inflate(tipo == 0 ? R.layout.row_folder : R.layout.row_song, parent, false);
+                v.setTag(Integer.valueOf(tipo));
+            }
+            if (tipo == 0) {
+                TextView nm = (TextView) v.findViewById(R.id.folName);
+                TextView ct = (TextView) v.findViewById(R.id.folCount);
+                ImageView th = (ImageView) v.findViewById(R.id.folThumb);
+                android.graphics.Bitmap bmp;
+                if (tab == 0) {
+                    Carpeta c = carpetas.get(i);
+                    nm.setText(c.name); ct.setText(c.songs.size() + " canciones");
+                    bmp = portadas.get("c:" + c.name);
+                } else {
+                    String n = nombresListas.get(i); int cnt = 0;
+                    try { cnt = listas.getJSONArray(n).length(); } catch (Exception e) {}
+                    nm.setText((n.equals("Favoritas") ? "★ " : "") + n); ct.setText(cnt + " canciones");
+                    bmp = portadas.get("l:" + n);
+                }
+                if (bmp != null) th.setImageBitmap(bmp);
+                else th.setImageDrawable(new ColorDrawable(0xFF262633));
             } else {
+                TextView t = (TextView) v.findViewById(R.id.rowTitle);
+                TextView a = (TextView) v.findViewById(R.id.rowArtist);
+                TextView d = (TextView) v.findViewById(R.id.rowDur);
                 Song s = cancionesCarpeta.get(i);
                 t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
                 d.setText(s.dur > 0 ? fmt(s.dur) : "");
@@ -1326,6 +1344,49 @@ public class MainActivity extends Activity {
             }
             return v;
         }
+    }
+
+    // Portada de una lista de canciones (primera con carátula)
+    private android.graphics.Bitmap portadaDe(ArrayList<Song> lista) {
+        int lim = Math.min(lista.size(), 8);
+        for (int i = 0; i < lim; i++) {
+            Song s = lista.get(i);
+            byte[] d = null;
+            if (artCache.containsKey(s.path)) d = artCache.get(s.path);
+            else {
+                try { MediaMetadataRetriever r = new MediaMetadataRetriever(); r.setDataSource(s.path); d = r.getEmbeddedPicture(); try { r.release(); } catch (Exception e) {} } catch (Exception e) {}
+            }
+            if (d != null) {
+                try { BitmapFactory.Options o = new BitmapFactory.Options(); o.inSampleSize = 2; return BitmapFactory.decodeByteArray(d, 0, d.length, o); } catch (Exception e) {}
+            }
+        }
+        return null;
+    }
+    private void calcularPortadasCarpetas() {
+        new Thread(new Runnable() {
+            public void run() {
+                for (Carpeta c : carpetas) {
+                    if (portadas.containsKey("c:" + c.name)) continue;
+                    android.graphics.Bitmap b = portadaDe(c.songs);
+                    if (b != null) portadas.put("c:" + c.name, b);
+                }
+                runOnUiThread(new Runnable() { public void run() { adapter.notifyDataSetChanged(); } });
+            }
+        }).start();
+    }
+    private void calcularPortadasListas() {
+        new Thread(new Runnable() {
+            public void run() {
+                for (String n : nombresListas) {
+                    if (portadas.containsKey("l:" + n)) continue;
+                    ArrayList<Song> arr = new ArrayList<Song>();
+                    try { org.json.JSONArray a = listas.getJSONArray(n); for (int k = 0; k < a.length() && k < 8; k++) { Song s = songPorRuta(a.optString(k)); if (s != null) arr.add(s); } } catch (Exception e) {}
+                    android.graphics.Bitmap b = portadaDe(arr);
+                    if (b != null) portadas.put("l:" + n, b);
+                }
+                runOnUiThread(new Runnable() { public void run() { adapter.notifyDataSetChanged(); } });
+            }
+        }).start();
     }
 
     @Override
