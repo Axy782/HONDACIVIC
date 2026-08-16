@@ -1,122 +1,219 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
-    android:background="@color/bg"
-    android:padding="10dp">
+    android:background="@color/bg">
 
-    <!-- ====== IZQUIERDA: ahora suena + controles ====== -->
+    <!-- ============ PANTALLA: REPRODUCIENDO ============ -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:id="@+id/paneReproduciendo"
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Carátula grande + info encima -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/art"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@android:color/transparent"
+                android:background="@color/surface2"/>
+
+            <!-- botón para abrir la lista -->
+            <Button
+                android:id="@+id/btnAbrirLista"
+                android:layout_width="wrap_content"
+                android:layout_height="46dp"
+                android:layout_gravity="top|right"
+                android:layout_margin="14dp"
+                android:text="Canciones"
+                android:textColor="@color/accent"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:background="#99000000"/>
+
+            <!-- botón de ajustes -->
+            <Button
+                android:id="@+id/btnAjustes"
+                android:layout_width="wrap_content"
+                android:layout_height="46dp"
+                android:layout_gravity="top|left"
+                android:layout_margin="14dp"
+                android:text="Ajustes"
+                android:textColor="@color/accent"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:background="#99000000"/>
+
+            <!-- franja oscura con título/artista abajo -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="#B0000000"
+                android:paddingLeft="20dp"
+                android:paddingRight="14dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:id="@+id/title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Sonido JFV"
+                        android:textColor="@color/text"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:ellipsize="end"/>
+                    <TextView
+                        android:id="@+id/artist"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Toca Canciones para empezar"
+                        android:textColor="#D7D7DE"
+                        android:textSize="15sp"
+                        android:singleLine="true"
+                        android:ellipsize="end"/>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnFav"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:text="★"
+                    android:textSize="22sp"
+                    android:textColor="@color/muted"
+                    android:background="@color/surface2"/>
+                <Button
+                    android:id="@+id/btnMasLista"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:text="+ Lista"
+                    android:textStyle="bold"
+                    android:textColor="#0A0A0E"
+                    android:background="@color/accent"
+                    android:layout_marginLeft="8dp"/>
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Barra de controles pequeña abajo -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#141018"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
+
+            <SeekBar
+                android:id="@+id/seek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/tCur" android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:text="0:00" android:textColor="@color/muted" android:textSize="11sp"/>
+                <TextView android:id="@+id/tDur" android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:gravity="right" android:text="0:00" android:textColor="@color/muted" android:textSize="11sp"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+
+                <Button android:id="@+id/btnShuffle" android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_weight="1" android:text="Aleat." android:textSize="11sp"
+                    android:textColor="@color/muted" android:background="@android:color/transparent"/>
+                <ImageButton android:id="@+id/btnPrev" android:layout_width="0dp" android:layout_height="50dp"
+                    android:layout_weight="1" android:src="@android:drawable/ic_media_previous"
+                    android:background="@android:color/transparent"/>
+                <ImageButton android:id="@+id/btnPlay" android:layout_width="0dp" android:layout_height="54dp"
+                    android:layout_weight="1.2" android:src="@android:drawable/ic_media_play"
+                    android:background="@color/accent"/>
+                <ImageButton android:id="@+id/btnNext" android:layout_width="0dp" android:layout_height="50dp"
+                    android:layout_weight="1" android:src="@android:drawable/ic_media_next"
+                    android:background="@android:color/transparent"/>
+                <Button android:id="@+id/btnRepeat" android:layout_width="0dp" android:layout_height="48dp"
+                    android:layout_weight="1" android:text="Repetir" android:textSize="11sp"
+                    android:textColor="@color/muted" android:background="@android:color/transparent"/>
+                <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="44dp"
+                    android:text="EQ" android:textColor="@color/accent" android:textStyle="bold"
+                    android:background="@color/surface2" android:layout_marginLeft="4dp"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="Vol" android:textColor="@color/muted" android:textSize="11sp"/>
+                <SeekBar android:id="@+id/vol" android:layout_width="0dp" android:layout_height="wrap_content"
+                    android:layout_weight="1" android:layout_marginLeft="8dp"/>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ============ PANTALLA: LISTA DE CANCIONES ============ -->
+    <LinearLayout
+        android:id="@+id/paneLista"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:layout_marginRight="10dp"
-        android:background="@color/surface"
-        android:padding="12dp">
-
-        <ImageView
-            android:id="@+id/art"
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:scaleType="centerCrop"
-            android:background="@color/surface2"/>
-
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Sonido JFV"
-            android:textColor="@color/text"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"/>
-
-        <TextView
-            android:id="@+id/artist"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Toca una canción"
-            android:textColor="@color/muted"
-            android:textSize="13sp"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"/>
-
-        <SeekBar
-            android:id="@+id/seek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"/>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <TextView android:id="@+id/tCur" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="0:00" android:textColor="@color/muted" android:textSize="11sp"/>
-            <TextView android:id="@+id/tDur" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:gravity="right" android:text="0:00" android:textColor="@color/muted" android:textSize="11sp"/>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="6dp">
-            <Button android:id="@+id/btnShuffle" android:layout_width="0dp" android:layout_height="52dp"
-                android:layout_weight="1" android:text="Aleat." android:textSize="11sp"
-                android:textColor="@color/muted" android:background="@color/surface2"/>
-            <ImageButton android:id="@+id/btnPrev" android:layout_width="0dp" android:layout_height="56dp"
-                android:layout_weight="1" android:layout_marginLeft="5dp"
-                android:src="@android:drawable/ic_media_previous" android:background="@color/surface2"/>
-            <ImageButton android:id="@+id/btnPlay" android:layout_width="0dp" android:layout_height="56dp"
-                android:layout_weight="1.3" android:layout_marginLeft="5dp"
-                android:src="@android:drawable/ic_media_play" android:background="@color/accent"/>
-            <ImageButton android:id="@+id/btnNext" android:layout_width="0dp" android:layout_height="56dp"
-                android:layout_weight="1" android:layout_marginLeft="5dp"
-                android:src="@android:drawable/ic_media_next" android:background="@color/surface2"/>
-            <Button android:id="@+id/btnRepeat" android:layout_width="0dp" android:layout_height="52dp"
-                android:layout_weight="1" android:layout_marginLeft="5dp" android:text="Repetir" android:textSize="11sp"
-                android:textColor="@color/muted" android:background="@color/surface2"/>
-        </LinearLayout>
+        android:background="@color/bg"
+        android:padding="10dp"
+        android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Vol" android:textColor="@color/muted" android:textSize="12sp"/>
-            <SeekBar android:id="@+id/vol" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:layout_marginLeft="8dp" android:layout_marginRight="8dp"/>
-            <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="44dp"
-                android:text="EQ" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
+            android:paddingBottom="8dp">
+            <Button android:id="@+id/btnVolver" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="&lt; Volver" android:textColor="@color/text" android:textSize="15sp"
+                android:background="@color/surface"/>
+            <TextView android:id="@+id/count" android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:layout_marginLeft="12dp" android:text="Buscando música…"
+                android:textColor="@color/muted" android:textSize="14sp"/>
+            <Button android:id="@+id/btnReproCarpeta" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="Reproducir" android:textColor="@color/accent" android:textStyle="bold" android:textSize="13sp"
+                android:background="@color/surface" android:visibility="gone"/>
+            <Button android:id="@+id/btnAleatCarpeta" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="Aleatorio" android:textColor="@color/accent" android:textStyle="bold" android:textSize="13sp"
+                android:background="@color/surface" android:layout_marginLeft="6dp" android:visibility="gone"/>
         </LinearLayout>
-    </LinearLayout>
 
-    <!-- ====== DERECHA: lista de canciones ====== -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/count"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Buscando música…"
-            android:textColor="@color/muted"
-            android:textSize="12sp"
-            android:paddingBottom="6dp"/>
+        <LinearLayout android:id="@+id/tabsRow" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingBottom="8dp">
+            <Button android:id="@+id/tabCarpetas" android:layout_width="0dp" android:layout_height="46dp"
+                android:layout_weight="1" android:text="Carpetas" android:textStyle="bold" android:textColor="@color/accent" android:background="@color/surface2"/>
+            <Button android:id="@+id/tabListas" android:layout_width="0dp" android:layout_height="46dp"
+                android:layout_weight="1" android:layout_marginLeft="8dp" android:text="Mis Listas" android:textStyle="bold" android:textColor="@color/muted" android:background="@color/surface"/>
+        </LinearLayout>
 
         <ListView
             android:id="@+id/list"
@@ -124,7 +221,139 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:cacheColorHint="#00000000"
-            android:divider="#22FFFFFF"
+            android:divider="#18FFFFFF"
             android:dividerHeight="1dp"/>
     </LinearLayout>
-</LinearLayout>
+
+    <!-- ============ PANTALLA: AJUSTES ============ -->
+    <LinearLayout
+        android:id="@+id/paneAjustes"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/bg"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="10dp">
+            <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginLeft="12dp" android:text="Ajustes" android:textColor="@color/muted" android:textSize="15sp"/>
+        </LinearLayout>
+
+        <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="Vincular carpeta de música" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="Elige la carpeta del USB donde está tu música. Solo mostrará esa carpeta." android:textColor="@color/muted" android:textSize="13sp" android:paddingTop="4dp"/>
+                <Button android:id="@+id/btnVincular" android:layout_width="wrap_content" android:layout_height="48dp"
+                    android:text="Elegir carpeta" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2" android:layout_marginTop="8dp"/>
+                <TextView android:id="@+id/txtCarpetaVinc" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="" android:textColor="@color/accent" android:textSize="12sp" android:paddingTop="6dp"/>
+                <Button android:id="@+id/btnDesvincular" android:layout_width="wrap_content" android:layout_height="42dp"
+                    android:text="Ver toda la música otra vez" android:textColor="@color/muted" android:textSize="12sp" android:background="@android:color/transparent" android:visibility="gone"/>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Descargar carátula al agregar" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Busca la portada en internet." android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <CheckBox android:id="@+id/chkAuto" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="10dp">
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Grabar carátula dentro del MP3" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="La guarda en el archivo, en su carpeta." android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <CheckBox android:id="@+id/chkEmbed" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Calidad de la carátula" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <Button android:id="@+id/calNormal" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Normal" android:textSize="13sp" android:background="@color/surface"/>
+                    <Button android:id="@+id/calAlta" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Alta" android:textSize="13sp" android:background="@color/surface2" android:layout_marginLeft="6dp"/>
+                    <Button android:id="@+id/calMaxima" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Máxima" android:textSize="13sp" android:background="@color/surface" android:layout_marginLeft="6dp"/>
+                </LinearLayout>
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tema de color" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="14dp"/>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <Button android:id="@+id/temaAmbar" android:layout_width="46dp" android:layout_height="46dp" android:text=" " android:background="#FFB020"/>
+                    <Button android:id="@+id/temaAzul" android:layout_width="46dp" android:layout_height="46dp" android:text=" " android:background="#3B82F6" android:layout_marginLeft="8dp"/>
+                    <Button android:id="@+id/temaRojo" android:layout_width="46dp" android:layout_height="46dp" android:text=" " android:background="#EF4444" android:layout_marginLeft="8dp"/>
+                    <Button android:id="@+id/temaVerde" android:layout_width="46dp" android:layout_height="46dp" android:text=" " android:background="#22C55E" android:layout_marginLeft="8dp"/>
+                </LinearLayout>
+
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ordenar canciones" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="14dp"/>
+                <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <Button android:id="@+id/ordNombre" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Nombre" android:textSize="13sp" android:background="@color/surface2"/>
+                    <Button android:id="@+id/ordArtista" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Artista" android:textSize="13sp" android:background="@color/surface" android:layout_marginLeft="6dp"/>
+                    <Button android:id="@+id/ordFecha" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Fecha" android:textSize="13sp" android:background="@color/surface" android:layout_marginLeft="6dp"/>
+                </LinearLayout>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="14dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Reanudar última canción" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkResume" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Auto-reproducir al abrir" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkAutoplay" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Pausar al desconectar el USB" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkPausaUsb" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Seguir sonando con pantalla apagada" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkPantalla" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Volumen al arrancar (50%)" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkVolArranque" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
+
+                <Button android:id="@+id/btnDescargarArt" android:layout_width="match_parent" android:layout_height="52dp"
+                    android:text="Descargar carátulas faltantes" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
+                <TextView android:id="@+id/txtProgArt" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="" android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="10dp"/>
+                <TextView android:id="@+id/txtNet" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="" android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="4dp"/>
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- ============ PANTALLA: EXPLORAR CARPETAS ============ -->
+    <LinearLayout
+        android:id="@+id/paneExplorar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="@color/bg"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="8dp">
+            <Button android:id="@+id/btnCancelarExplorar" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="Cancelar" android:textColor="@color/text" android:textSize="14sp" android:background="@color/surface"/>
+            <Button android:id="@+id/btnUsarCarpeta" android:layout_width="wrap_content" android:layout_height="46dp"
+                android:text="Usar esta carpeta" android:textColor="@color/accent" android:textStyle="bold" android:textSize="14sp"
+                android:background="@color/surface" android:layout_marginLeft="8dp"/>
+        </LinearLayout>
+        <TextView android:id="@+id/txtRutaActual" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="/" android:textColor="@color/muted" android:textSize="12sp" android:paddingBottom="6dp"/>
+        <ListView android:id="@+id/listExplorar" android:layout_width="match_parent" android:layout_height="0dp"
+            android:layout_weight="1" android:cacheColorHint="#00000000" android:divider="#18FFFFFF" android:dividerHeight="1dp"/>
+    </LinearLayout>
+
+</FrameLayout>
