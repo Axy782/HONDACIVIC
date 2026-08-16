@@ -18,7 +18,7 @@ import java.security.KeyStore;
 public class Tls12SocketFactory extends SSLSocketFactory {
 
     private final SSLSocketFactory delegate;
-    private static final String[] TLS = { "TLSv1.2" };
+    private static final String[] TLS = { "TLSv1", "TLSv1.1", "TLSv1.2" };
 
     public Tls12SocketFactory() throws Exception {
         SSLContext ctx = SSLContext.getInstance("TLS");
@@ -30,7 +30,9 @@ public class Tls12SocketFactory extends SSLSocketFactory {
 
     private Socket habilitar(Socket s) {
         if (s instanceof SSLSocket) {
-            try { ((SSLSocket) s).setEnabledProtocols(TLS); } catch (Exception e) {}
+            try { ((SSLSocket) s).setEnabledProtocols(TLS); } catch (Exception e) {
+                try { ((SSLSocket) s).setEnabledProtocols(new String[]{ "TLSv1.2" }); } catch (Exception e2) {}
+            }
         }
         return s;
     }

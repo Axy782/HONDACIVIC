@@ -19,6 +19,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -120,6 +122,7 @@ public class MainActivity extends Activity {
     private android.os.PowerManager.WakeLock wakeCpu = null;
     private android.content.BroadcastReceiver usbReceiver = null;
     private android.content.BroadcastReceiver netReceiver = null;
+    private android.database.ContentObserver volObserver = null;
     private boolean descargaEnCurso = false;
 
     private final Handler handler = new Handler();
@@ -167,7 +170,7 @@ public class MainActivity extends Activity {
         paneAjustes = findViewById(R.id.paneAjustes);
         paneExplorar = findViewById(R.id.paneExplorar);
         listExplorar = (ListView) findViewById(R.id.listExplorar);
-        optAuto = prefs.getBoolean("optAuto", false);
+        optAuto = prefs.getBoolean("optAuto", true);
         optEmbed = prefs.getBoolean("optEmbed", true);
         carpetaVinculada = prefs.getString("carpetaVinc", null);
         optCalidad = prefs.getString("calidad", "alta");
@@ -204,7 +207,31 @@ public class MainActivity extends Activity {
         findViewById(R.id.tabListas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ setTab(1); }});
         findViewById(R.id.btnFav).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ toggleFav(); }});
         findViewById(R.id.btnMasLista).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarMasLista(); }});
-        imgArt.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ cambiarCaratula(); }});
+        final GestureDetector gestos = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            public boolean onDown(MotionEvent e) { return true; }
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
+                if (e1 == null || e2 == null) return false;
+                float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
+                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 90) {
+                    if (dx > 0) anterior(); else siguiente(false);
+                    return true;
+                }
+                return false;
+            }
+        });
+        imgArt.setOnTouchListener(new View.OnTouchListener() {
+            long ultimoTap = 0; int toques = 0;
+            public boolean onTouch(View v, MotionEvent e) {
+                gestos.onTouchEvent(e);
+                if (e.getAction() == MotionEvent.ACTION_UP) {
+                    long ahora = System.currentTimeMillis();
+                    if (ahora - ultimoTap < 600) toques++; else toques = 1;
+                    ultimoTap = ahora;
+                    if (toques >= 5) { toques = 0; cambiarCaratula(); }
+                }
+                return true;
+            }
+        });
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
             public boolean onItemLongClick(AdapterView<?> p, View v, int position, long id){
                 if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista) { quitarDeListaActual(position); return true; }
@@ -286,6 +313,13 @@ public class MainActivity extends Activity {
         vol.setMax(maxv);
         if (optVolArranque) { am.setStreamVolume(AudioManager.STREAM_MUSIC, maxv / 2, 0); }
         vol.setProgress(am.getStreamVolume(AudioManager.STREAM_MUSIC));
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
+        volObserver = new android.database.ContentObserver(new Handler()) {
+            public void onChange(boolean self) {
+                try { vol.setProgress(am.getStreamVolume(AudioManager.STREAM_MUSIC)); } catch (Exception e) {}
+            }
+        };
+        try { getContentResolver().registerContentObserver(android.provider.Settings.System.CONTENT_URI, true, volObserver); } catch (Exception e) {}
         vol.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s, int p, boolean fromUser){ if(fromUser) am.setStreamVolume(AudioManager.STREAM_MUSIC, p, 0); }
             public void onStartTrackingTouch(SeekBar s){}
@@ -1160,10 +1194,12 @@ public class MainActivity extends Activity {
             public void run() {
                 final ArrayList<String> labels = new ArrayList<String>();
                 final ArrayList<String> urls = new ArrayList<String>();
+                final boolean[] falloRed = { false };
                 try {
                     String url = "https://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + URLEncoder.encode(term, "UTF-8");
                     String json = httpGet(url);
-                    if (json != null) {
+                    if (json == null) { falloRed[0] = true; }
+                    else {
                         org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
                         if (arr != null) {
                             String px = optCalidad.equals("maxima") ? "1200x1200" : optCalidad.equals("normal") ? "300x300" : "600x600";
@@ -1176,10 +1212,11 @@ public class MainActivity extends Activity {
                             }
                         }
                     }
-                } catch (Exception e) {}
+                } catch (Exception e) { falloRed[0] = true; }
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados", Toast.LENGTH_SHORT).show(); return; }
+                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "Sin conexión o el radio bloqueó internet", Toast.LENGTH_LONG).show(); return; }
+                        if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
                         new AlertDialog.Builder(MainActivity.this).setTitle("Elige la carátula")
                             .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
                                 public void onClick(android.content.DialogInterface d, int w) { aplicarCaratula(s, urls.get(w)); }
@@ -1297,6 +1334,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(actualizador);
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}
+        try { if (volObserver != null) getContentResolver().unregisterContentObserver(volObserver); } catch (Exception e) {}
         liberarWake();
         try { if (eq != null) eq.release(); } catch (Exception e) {}
         try { if (mp != null) mp.release(); } catch (Exception e) {}
