@@ -21,6 +21,8 @@ import android.os.Environment;
 import android.os.Handler;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.KeyEvent;
+import android.content.ComponentName;
 import android.media.audiofx.Visualizer;
 import android.provider.MediaStore;
 import android.view.Gravity;
@@ -63,6 +65,9 @@ import java.util.HashSet;
 
 public class MainActivity extends Activity {
 
+    static MainActivity activo;
+    private ComponentName mbCn;
+
     static class Song {
         long id, albumId, fecha;
         String title, artist, album, path;
@@ -94,7 +99,39 @@ public class MainActivity extends Activity {
             }
         }
     };
-    private void pedirFoco() { try { am.requestAudioFocus(focoListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN); } catch (Exception e) {} }
+    private void pedirFoco() {
+        try { am.requestAudioFocus(focoListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN); } catch (Exception e) {}
+        try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
+    }
+    public void manejarTeclaMedia(int code) {
+        switch (code) {
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
+                siguiente(false); break;
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_MEDIA_REWIND:
+                anterior(); break;
+            case KeyEvent.KEYCODE_MEDIA_PLAY:
+            case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_HEADSETHOOK:
+                toggle(); break;
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                try { if (mp != null && prepared && mp.isPlaying()) { mp.pause(); pintarPlay(false); } } catch (Exception e) {}
+                break;
+        }
+    }
+    public boolean onKeyDown(int keyCode, KeyEvent e) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_MEDIA_NEXT: case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_MEDIA_PLAY: case KeyEvent.KEYCODE_MEDIA_PAUSE:
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE: case KeyEvent.KEYCODE_HEADSETHOOK:
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: case KeyEvent.KEYCODE_MEDIA_REWIND:
+            case KeyEvent.KEYCODE_MEDIA_STOP:
+                manejarTeclaMedia(keyCode); return true;
+        }
+        return super.onKeyDown(keyCode, e);
+    }
 
     private boolean shuffle = false;
     private int repeat = 0;
@@ -107,7 +144,7 @@ public class MainActivity extends Activity {
     private View artScrim;
     private TextView txtTitle, txtArtist, txtCur, txtDur, txtCount;
     private SeekBar seek;
-    private Button btnPlay, btnPrev, btnNext;
+    private ImageButton btnPlay, btnPrev, btnNext;
     private Button btnShuffle, btnRepeat, btnEq;
     private ListView list;
     private SongAdapter adapter;
@@ -155,6 +192,9 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("sonido", MODE_PRIVATE);
         am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        activo = this;
+        mbCn = new ComponentName(getPackageName(), MediaButtonReceiver.class.getName());
+        try { am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
 
         imgArt = (ImageView) findViewById(R.id.art);
         imgArtBg = (ImageView) findViewById(R.id.artBg);
@@ -165,9 +205,9 @@ public class MainActivity extends Activity {
         txtDur = (TextView) findViewById(R.id.tDur);
         txtCount = (TextView) findViewById(R.id.count);
         seek = (SeekBar) findViewById(R.id.seek);
-        btnPlay = (Button) findViewById(R.id.btnPlay);
-        btnPrev = (Button) findViewById(R.id.btnPrev);
-        btnNext = (Button) findViewById(R.id.btnNext);
+        btnPlay = (ImageButton) findViewById(R.id.btnPlay);
+        btnPrev = (ImageButton) findViewById(R.id.btnPrev);
+        btnNext = (ImageButton) findViewById(R.id.btnNext);
         btnShuffle = (Button) findViewById(R.id.btnShuffle);
         btnRepeat = (Button) findViewById(R.id.btnRepeat);
         btnEq = (Button) findViewById(R.id.btnEq);
@@ -484,7 +524,7 @@ public class MainActivity extends Activity {
             try {
                 int[] cols = coloresDe(bmp);
                 android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, cols);
+                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
                 imgArtBg.setImageDrawable(null);
                 imgArtBg.setBackgroundDrawable(g);
             } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
@@ -1102,6 +1142,7 @@ public class MainActivity extends Activity {
         }
         return abrir(cur);
     }
+    private String ultimoError = "";
     private String httpGet(String u) {
         try {
             HttpURLConnection c = abrirSiguiendo(u);
@@ -1111,7 +1152,7 @@ public class MainActivity extends Activity {
             while ((n = in.read(b)) > 0) bo.write(b, 0, n);
             in.close(); c.disconnect();
             return new String(bo.toByteArray(), "UTF-8");
-        } catch (Exception e) { return null; }
+        } catch (Exception e) { ultimoError = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : ""); return null; }
     }
     private byte[] httpGetBytes(String u) {
         try {
@@ -1364,7 +1405,7 @@ public class MainActivity extends Activity {
                 } catch (Exception e) { falloRed[0] = true; }
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "Sin conexión o el radio bloqueó internet", Toast.LENGTH_LONG).show(); return; }
+                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "No se pudo conectar. Detalle: " + (ultimoError.length() > 0 ? ultimoError : "desconocido"), Toast.LENGTH_LONG).show(); return; }
                         if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
                         new AlertDialog.Builder(MainActivity.this).setTitle("Elige la carátula")
                             .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
@@ -1437,18 +1478,18 @@ public class MainActivity extends Activity {
         d.setColor(color);
         return d;
     }
-    // Toma dos colores representativos de la carátula para el fondo degradado
+    // Toma color de la izquierda y de la derecha de la carátula (degradado horizontal, estilo Poweramp)
     private int[] coloresDe(Bitmap bmp) {
         try {
             Bitmap s = Bitmap.createScaledBitmap(bmp, 4, 4, true);
             long r1 = 0, g1 = 0, b1 = 0, r2 = 0, g2 = 0, b2 = 0; int n1 = 0, n2 = 0;
             for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) {
                 int px = s.getPixel(x, y); int r = (px >> 16) & 255, g = (px >> 8) & 255, b = px & 255;
-                if (y < 2) { r1 += r; g1 += g; b1 += b; n1++; } else { r2 += r; g2 += g; b2 += b; n2++; }
+                if (x < 2) { r1 += r; g1 += g; b1 += b; n1++; } else { r2 += r; g2 += g; b2 += b; n2++; }
             }
             if (n1 == 0) n1 = 1; if (n2 == 0) n2 = 1;
-            int c1 = oscurecer((int) (r1 / n1), (int) (g1 / n1), (int) (b1 / n1), 0.75f);
-            int c2 = oscurecer((int) (r2 / n2), (int) (g2 / n2), (int) (b2 / n2), 0.45f);
+            int c1 = oscurecer((int) (r1 / n1), (int) (g1 / n1), (int) (b1 / n1), 0.85f);
+            int c2 = oscurecer((int) (r2 / n2), (int) (g2 / n2), (int) (b2 / n2), 0.85f);
             return new int[]{ c1, c2 };
         } catch (Exception e) { return new int[]{ 0xFF1a1a26, 0xFF06060a }; }
     }
@@ -1476,7 +1517,7 @@ public class MainActivity extends Activity {
         return pal[Math.abs(h) % pal.length];
     }
     private void pintarPlay(boolean playing) {
-        btnPlay.setText(playing ? "▮▮" : "▶");
+        btnPlay.setImageResource(playing ? R.drawable.ic_jfv_pause : R.drawable.ic_jfv_play);
         if (playing) tomarWake(); else liberarWake();
         try { if (particles != null) { if (efectosOn && playing) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
         try { if (vizBg != null) { if (efectosOn && playing) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
@@ -1583,6 +1624,11 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        activo = this;
+        try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
+    }
     protected void onDestroy() {
         super.onDestroy();
         handler.removeCallbacks(actualizador);
@@ -1592,6 +1638,8 @@ public class MainActivity extends Activity {
         try { if (visualizer != null) visualizer.release(); } catch (Exception e) {}
         try { if (vizBg != null) vizBg.parar(); } catch (Exception e) {}
         try { if (particles != null) particles.parar(); } catch (Exception e) {}
+        try { if (mbCn != null) am.unregisterMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
+        if (activo == this) activo = null;
         liberarWake();
         try { if (eq != null) eq.release(); } catch (Exception e) {}
         try { if (mp != null) mp.release(); } catch (Exception e) {}

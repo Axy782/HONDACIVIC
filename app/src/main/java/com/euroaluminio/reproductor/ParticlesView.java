@@ -12,6 +12,7 @@ import android.view.View;
 public class ParticlesView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint barridoPaint = new Paint();
     private int color = 0xFFFFB020;
     private boolean corriendo = false, init = false;
     private static final int N = 26;
@@ -67,6 +68,18 @@ public class ParticlesView extends View {
             cv.drawCircle(px[i], py[i], rad, paint);
             paint.setColor(Color.argb((int) (al * 60), r, g, b));
             cv.drawCircle(px[i], py[i], rad * 2.2f, paint);
+        }
+        // Barrido de brillo: una franja de luz cruza la carátula cada ~4s
+        long ms = System.currentTimeMillis() % 4000L;
+        if (ms < 2000L) {
+            float pp = ms / 2000f;
+            float bx = pp * (w * 1.6f) - w * 0.3f;
+            android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
+                bx - 45, 0, bx + 45, ht,
+                new int[]{ 0x00FFFFFF, 0x40FFFFFF, 0x00FFFFFF }, null,
+                android.graphics.Shader.TileMode.CLAMP);
+            barridoPaint.setShader(lg);
+            cv.drawRect(0, 0, w, ht, barridoPaint);
         }
     }
 }
