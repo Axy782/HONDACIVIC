@@ -522,11 +522,10 @@ public class MainActivity extends Activity {
         if (bmp != null) {
             imgArt.setImageBitmap(bmp);
             try {
-                int[] cols = coloresDe(bmp);
-                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, cols);
-                imgArtBg.setImageDrawable(null);
-                imgArtBg.setBackgroundDrawable(g);
+                // Difuminado suave tipo Poweramp: reducir mucho y dejar que el ImageView agrande con filtrado
+                Bitmap chico = Bitmap.createScaledBitmap(bmp, 16, 16, true);
+                imgArtBg.setImageBitmap(chico);
+                imgArtBg.setBackgroundColor(0xFF06060A);
             } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
             artScrim.setVisibility(View.VISIBLE);
         } else {
@@ -1088,19 +1087,19 @@ public class MainActivity extends Activity {
     private String pxCal() { return optCalidad.equals("maxima") ? "1200x1200" : optCalidad.equals("normal") ? "300x300" : "600x600"; }
     private byte[] artDeItunes(String term) {
         try {
-            String url = "http://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + URLEncoder.encode(term, "UTF-8");
+            String url = "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + URLEncoder.encode(term, "UTF-8");
             String json = httpGet(url); if (json == null) return null;
             org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
             if (arr == null || arr.length() == 0) return null;
             String art = arr.getJSONObject(0).optString("artworkUrl100", "");
             if (art.length() == 0) return null;
-            art = art.replace("100x100", pxCal()).replace("https://", "http://").replace("-ssl.mzstatic.com", ".mzstatic.com");
+            art = art.replace("100x100", pxCal());
             return httpGetBytes(art);
         } catch (Exception e) { return null; }
     }
     private byte[] artDeDeezer(String term) {
         try {
-            String url = "http://api.deezer.com/search?limit=1&q=" + URLEncoder.encode(term, "UTF-8");
+            String url = "https://api.deezer.com/search?limit=1&q=" + URLEncoder.encode(term, "UTF-8");
             String json = httpGet(url); if (json == null) return null;
             org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("data");
             if (arr == null || arr.length() == 0) return null;
@@ -1109,19 +1108,19 @@ public class MainActivity extends Activity {
             String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
             String art = alb.optString(key, alb.optString("cover_big", alb.optString("cover", "")));
             if (art.length() == 0) return null;
-            return httpGetBytes(art.replace("https://", "http://"));
+            return httpGetBytes(art);
         } catch (Exception e) { return null; }
     }
     private byte[] artDeMusicBrainz(String term) {
         try {
-            String url = "http://musicbrainz.org/ws/2/release/?fmt=json&limit=1&query=" + URLEncoder.encode(term, "UTF-8");
+            String url = "https://musicbrainz.org/ws/2/release/?fmt=json&limit=1&query=" + URLEncoder.encode(term, "UTF-8");
             String json = httpGet(url); if (json == null) return null;
             org.json.JSONArray rel = new org.json.JSONObject(json).optJSONArray("releases");
             if (rel == null || rel.length() == 0) return null;
             String mbid = rel.getJSONObject(0).optString("id", "");
             if (mbid.length() == 0) return null;
             String size = optCalidad.equals("normal") ? "250" : "500";
-            return httpGetBytes("http://coverartarchive.org/release/" + mbid + "/front-" + size);
+            return httpGetBytes("https://coverartarchive.org/release/" + mbid + "/front-" + size);
         } catch (Exception e) { return null; }
     }
     private HttpURLConnection abrirSiguiendo(String u) throws Exception {
@@ -1252,11 +1251,11 @@ public class MainActivity extends Activity {
             if (visualizer != null) { try { visualizer.release(); } catch (Exception e) {} visualizer = null; }
             if (mp == null) return;
             visualizer = new Visualizer(mp.getAudioSessionId());
-            visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[1]);
+            visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[0]);
             visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
                 public void onWaveFormDataCapture(Visualizer v, byte[] wave, int rate) {}
                 public void onFftDataCapture(Visualizer v, byte[] data, int rate) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); }
-            }, Visualizer.getMaxCaptureRate() / 2, false, true);
+            }, Visualizer.getMaxCaptureRate() / 4, false, true);
             visualizer.setEnabled(true);
         } catch (Throwable t) { visualizer = null; }  // en radios viejos puede fallar: usa animación por tiempo
     }
@@ -1366,7 +1365,7 @@ public class MainActivity extends Activity {
                 try {
                     String px = pxCal();
                     // Apple / iTunes
-                    String url = "http://itunes.apple.com/search?media=music&entity=song&limit=6&term=" + URLEncoder.encode(term, "UTF-8");
+                    String url = "https://itunes.apple.com/search?media=music&entity=song&limit=6&term=" + URLEncoder.encode(term, "UTF-8");
                     String json = httpGet(url);
                     if (json == null) { falloRed[0] = true; }
                     else {
@@ -1377,13 +1376,13 @@ public class MainActivity extends Activity {
                                 String a = o.optString("artworkUrl100", "");
                                 if (a.length() == 0) continue;
                                 labels.add("[Apple] " + o.optString("trackName", "?") + " - " + o.optString("artistName", ""));
-                                urls.add(a.replace("100x100", px).replace("https://", "http://").replace("-ssl.mzstatic.com", ".mzstatic.com"));
+                                urls.add(a.replace("100x100", px));
                             }
                         }
                     }
                     // Deezer
                     try {
-                        String url2 = "http://api.deezer.com/search?limit=6&q=" + URLEncoder.encode(term, "UTF-8");
+                        String url2 = "https://api.deezer.com/search?limit=6&q=" + URLEncoder.encode(term, "UTF-8");
                         String json2 = httpGet(url2);
                         if (json2 != null) {
                             org.json.JSONArray arr2 = new org.json.JSONObject(json2).optJSONArray("data");
@@ -1397,7 +1396,7 @@ public class MainActivity extends Activity {
                                     if (a.length() == 0) continue;
                                     org.json.JSONObject art2 = o.optJSONObject("artist");
                                     labels.add("[Deezer] " + o.optString("title", "?") + " - " + (art2 != null ? art2.optString("name", "") : ""));
-                                    urls.add(a.replace("https://", "http://"));
+                                    urls.add(a);
                                 }
                             }
                         }

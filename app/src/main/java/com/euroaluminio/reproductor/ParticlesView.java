@@ -15,7 +15,7 @@ public class ParticlesView extends View {
     private final Paint barridoPaint = new Paint();
     private int color = 0xFFFFB020;
     private boolean corriendo = false, init = false;
-    private static final int N = 26;
+    private static final int N = 18;
     private final float[] px = new float[N], py = new float[N], pvx = new float[N], pvy = new float[N], pr = new float[N], pa = new float[N];
     private final Handler h = new Handler();
     private byte[] fft = null;

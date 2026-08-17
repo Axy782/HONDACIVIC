@@ -28,10 +28,16 @@ public class Tls12SocketFactory extends SSLSocketFactory {
         delegate = ctx.getSocketFactory();
     }
 
-    private Socket habilitar(Socket s) {
+    private Socket habilitar(Socket s) { return habilitar(s, null); }
+    private Socket habilitar(Socket s, String host) {
         if (s instanceof SSLSocket) {
-            try { ((SSLSocket) s).setEnabledProtocols(TLS); } catch (Exception e) {
-                try { ((SSLSocket) s).setEnabledProtocols(new String[]{ "TLSv1.2" }); } catch (Exception e2) {}
+            SSLSocket ss = (SSLSocket) s;
+            try { ss.setEnabledProtocols(TLS); } catch (Exception e) {
+                try { ss.setEnabledProtocols(new String[]{ "TLSv1.2" }); } catch (Exception e2) {}
+            }
+            // SNI: indicar el nombre del servidor (imprescindible en Android viejo con CDNs modernos)
+            if (host != null) {
+                try { ss.getClass().getMethod("setHostname", String.class).invoke(ss, host); } catch (Exception e) {}
             }
         }
         return s;
@@ -41,9 +47,9 @@ public class Tls12SocketFactory extends SSLSocketFactory {
     @Override public String[] getSupportedCipherSuites() { return delegate.getSupportedCipherSuites(); }
 
     @Override public Socket createSocket() throws IOException { return habilitar(delegate.createSocket()); }
-    @Override public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException { return habilitar(delegate.createSocket(s, host, port, autoClose)); }
-    @Override public Socket createSocket(String host, int port) throws IOException, UnknownHostException { return habilitar(delegate.createSocket(host, port)); }
-    @Override public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException, UnknownHostException { return habilitar(delegate.createSocket(host, port, localHost, localPort)); }
-    @Override public Socket createSocket(InetAddress host, int port) throws IOException { return habilitar(delegate.createSocket(host, port)); }
-    @Override public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException { return habilitar(delegate.createSocket(address, port, localAddress, localPort)); }
+    @Override public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException { return habilitar(delegate.createSocket(s, host, port, autoClose), host); }
+    @Override public Socket createSocket(String host, int port) throws IOException, UnknownHostException { return habilitar(delegate.createSocket(host, port), host); }
+    @Override public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException, UnknownHostException { return habilitar(delegate.createSocket(host, port, localHost, localPort), host); }
+    @Override public Socket createSocket(InetAddress host, int port) throws IOException { return habilitar(delegate.createSocket(host, port), host != null ? host.getHostName() : null); }
+    @Override public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException { return habilitar(delegate.createSocket(address, port, localAddress, localPort), address != null ? address.getHostName() : null); }
 }

@@ -22,7 +22,7 @@
             android:id="@+id/artScrim"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#66000000"/>
+            android:background="#40000000"/>
 
         <com.euroaluminio.reproductor.VisualizerView
             android:id="@+id/vizBg"
@@ -234,7 +234,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes · v29" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v31" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
