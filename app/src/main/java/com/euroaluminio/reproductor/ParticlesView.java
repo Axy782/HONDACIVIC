@@ -20,6 +20,11 @@ public class ParticlesView extends View {
     private final Handler h = new Handler();
     private byte[] fft = null;
     private float bass = 0.3f;
+    private boolean mostrarParts = true;
+    private boolean mostrarBrillo = true;
+
+    public void setBrillo(boolean b) { mostrarBrillo = b; }
+    public void setParts(boolean b) { mostrarParts = b; }
 
     private final Runnable loop = new Runnable() {
         public void run() { if (!corriendo) return; invalidate(); h.postDelayed(this, 60); }
@@ -58,28 +63,32 @@ public class ParticlesView extends View {
         }
         bass += (target - bass) * 0.3f;
         int r = Color.red(color), g = Color.green(color), b = Color.blue(color);
-        for (int i = 0; i < N; i++) {
-            px[i] += pvx[i] * (1f + bass); py[i] += pvy[i] * (1f + bass); pa[i] += 0.03f;
-            if (px[i] < 0) px[i] = w; if (px[i] > w) px[i] = 0;
-            if (py[i] < 0) py[i] = ht; if (py[i] > ht) py[i] = 0;
-            float al = 0.10f + 0.14f * (float) Math.sin(pa[i]) + bass * 0.35f; if (al < 0) al = 0; if (al > 0.85f) al = 0.85f;
-            float rad = pr[i] * (1f + bass * 0.8f);
-            paint.setColor(Color.argb((int) (al * 255), r, g, b));
-            cv.drawCircle(px[i], py[i], rad, paint);
-            paint.setColor(Color.argb((int) (al * 60), r, g, b));
-            cv.drawCircle(px[i], py[i], rad * 2.2f, paint);
+        if (mostrarParts) {
+            for (int i = 0; i < N; i++) {
+                px[i] += pvx[i] * (1f + bass); py[i] += pvy[i] * (1f + bass); pa[i] += 0.03f;
+                if (px[i] < 0) px[i] = w; if (px[i] > w) px[i] = 0;
+                if (py[i] < 0) py[i] = ht; if (py[i] > ht) py[i] = 0;
+                float al = 0.10f + 0.14f * (float) Math.sin(pa[i]) + bass * 0.35f; if (al < 0) al = 0; if (al > 0.85f) al = 0.85f;
+                float rad = pr[i] * (1f + bass * 0.8f);
+                paint.setColor(Color.argb((int) (al * 255), r, g, b));
+                cv.drawCircle(px[i], py[i], rad, paint);
+                paint.setColor(Color.argb((int) (al * 60), r, g, b));
+                cv.drawCircle(px[i], py[i], rad * 2.2f, paint);
+            }
         }
         // Barrido de brillo: una franja de luz cruza la carátula cada ~4s
-        long ms = System.currentTimeMillis() % 4000L;
-        if (ms < 2000L) {
-            float pp = ms / 2000f;
-            float bx = pp * (w * 1.6f) - w * 0.3f;
-            android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
-                bx - 45, 0, bx + 45, ht,
-                new int[]{ 0x00FFFFFF, 0x40FFFFFF, 0x00FFFFFF }, null,
-                android.graphics.Shader.TileMode.CLAMP);
-            barridoPaint.setShader(lg);
-            cv.drawRect(0, 0, w, ht, barridoPaint);
+        if (mostrarBrillo) {
+            long ms = System.currentTimeMillis() % 4000L;
+            if (ms < 2000L) {
+                float pp = ms / 2000f;
+                float bx = pp * (w * 1.6f) - w * 0.3f;
+                android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
+                    bx - 45, 0, bx + 45, ht,
+                    new int[]{ 0x00FFFFFF, 0x40FFFFFF, 0x00FFFFFF }, null,
+                    android.graphics.Shader.TileMode.CLAMP);
+                barridoPaint.setShader(lg);
+                cv.drawRect(0, 0, w, ht, barridoPaint);
+            }
         }
     }
 }

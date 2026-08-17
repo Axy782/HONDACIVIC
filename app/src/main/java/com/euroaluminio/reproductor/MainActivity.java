@@ -177,6 +177,7 @@ public class MainActivity extends Activity {
     private VisualizerView vizBg = null;
     private ParticlesView particles = null;
     private boolean efectosOn = true;
+    private int efectoModo = 3;   // 0 anillos, 1 partículas, 2 brillo, 3 todos, 4 ninguno
     private Visualizer visualizer = null;
 
     private final Handler handler = new Handler();
@@ -240,6 +241,7 @@ public class MainActivity extends Activity {
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque", true);
         efectosOn = prefs.getBoolean("efectos", true);
+        efectoModo = prefs.getInt("efectoModo", 3);
         aplicarTema();
 
         findViewById(R.id.btnAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
@@ -298,9 +300,10 @@ public class MainActivity extends Activity {
         particles = (ParticlesView) findViewById(R.id.particulas);
         if (particles != null) particles.setColor(accent);
         findViewById(R.id.btnVis).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            efectosOn = !efectosOn; prefs.edit().putBoolean("efectos", efectosOn).apply();
+            efectoModo = (efectoModo + 1) % 5; prefs.edit().putInt("efectoModo", efectoModo).apply();
             aplicarEfectos();
-            Toast.makeText(MainActivity.this, efectosOn ? "Efectos activados" : "Efectos desactivados", Toast.LENGTH_SHORT).show();
+            String[] nom = { "Solo anillos", "Solo partículas", "Solo brillo", "Todos", "Sin efectos" };
+            Toast.makeText(MainActivity.this, nom[efectoModo], Toast.LENGTH_SHORT).show();
         }});
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
             public boolean onItemLongClick(AdapterView<?> p, View v, int position, long id){
@@ -844,6 +847,34 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void aplicarPresetLatino(String nombre) {
+        if (eq == null) return;
+        try {
+            short bands = eq.getNumberOfBands();
+            short[] range = eq.getBandLevelRange();
+            short min = range[0], max = range[1];
+            for (short b = 0; b < bands; b++) {
+                int f = eq.getCenterFreq(b) / 1000; // Hz
+                int mB = ganLatino(nombre, f);
+                if (mB < min) mB = min; if (mB > max) mB = max;
+                eq.setBandLevel(b, (short) mB);
+            }
+        } catch (Exception e) {}
+    }
+    private int ganLatino(String g, int f) {
+        // ganancias en milibelios (100 mB = 1 dB)
+        if (g.equals("Bachata")) {
+            if (f < 80) return 300; if (f < 250) return 200; if (f < 600) return -150;
+            if (f < 1500) return 0; if (f < 4000) return 350; if (f < 9000) return 450; return 350;
+        } else if (g.equals("Merengue")) {
+            if (f < 80) return 450; if (f < 250) return 300; if (f < 600) return -100;
+            if (f < 1500) return 100; if (f < 4000) return 250; if (f < 9000) return 400; return 300;
+        } else if (g.equals("Salsa")) {
+            if (f < 80) return 250; if (f < 250) return 150; if (f < 600) return 0;
+            if (f < 1500) return 250; if (f < 4000) return 300; if (f < 9000) return 300; return 200;
+        }
+        return 0;
+    }
     private void configurarEq() {
         try {
             if (eq != null) { eq.release(); eq = null; }
@@ -879,6 +910,9 @@ public class MainActivity extends Activity {
 
             final ArrayList<String> presets = new ArrayList<String>();
             presets.add("Personalizado");
+            presets.add("Bachata");
+            presets.add("Merengue");
+            presets.add("Salsa");
             final short nPre = eq.getNumberOfPresets();
             for (short i = 0; i < nPre; i++) presets.add(eq.getPresetName(i));
             final Spinner sp = new Spinner(this);
@@ -930,7 +964,12 @@ public class MainActivity extends Activity {
                 public void onItemSelected(AdapterView<?> parent, View v, int position, long idd) {
                     if (position == 0) return;
                     try {
-                        eq.usePreset((short) (position - 1));
+                        if (!eqEnabled) { eqEnabled = true; chk.setChecked(true); try { eq.setEnabled(true); } catch (Exception e2) {} }
+                        if (position >= 1 && position <= 3) {
+                            aplicarPresetLatino((String) parent.getItemAtPosition(position));
+                        } else {
+                            eq.usePreset((short) (position - 4));
+                        }
                         for (short b = 0; b < bands; b++) sliders[b].setProgress(eq.getBandLevel(b) - min);
                     } catch (Exception e) {}
                 }
@@ -1208,7 +1247,7 @@ public class MainActivity extends Activity {
         if (s.title != null) body.write(frameTexto("TIT2", s.title));
         if (s.artist != null && s.artist.length() > 0) body.write(frameTexto("TPE1", s.artist));
         if (s.album != null && s.album.length() > 0) body.write(frameTexto("TALB", s.album));
-        body.write(frameApic(img));
+        if (img != null) body.write(frameApic(img));
         byte[] b = body.toByteArray();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[]{ 0x49, 0x44, 0x33, 3, 0, 0 }); // "ID3" v2.3
@@ -1243,8 +1282,11 @@ public class MainActivity extends Activity {
 
     private void aplicarEfectos() {
         boolean sonando = (mp != null && prepared && mp.isPlaying());
-        try { if (particles != null) { if (efectosOn && sonando) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
-        try { if (vizBg != null) { if (efectosOn && sonando) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
+        boolean anillos = sonando && (efectoModo == 0 || efectoModo == 3);
+        boolean parts   = sonando && (efectoModo == 1 || efectoModo == 3);
+        boolean brillo  = sonando && (efectoModo == 2 || efectoModo == 3);
+        try { if (vizBg != null) { if (anillos) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
+        try { if (particles != null) { particles.setParts(parts); particles.setBrillo(brillo); if (parts || brillo) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
     }
     private void attachVisualizer() {
         try {
@@ -1347,14 +1389,58 @@ public class MainActivity extends Activity {
     private void cambiarCaratula() {
         final Song s = cancionActual();
         if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
-        final EditText et = new EditText(this);
-        et.setText((s.artist != null && s.artist.length() > 0 ? s.artist + " " : "") + (s.title != null ? s.title : ""));
-        new AlertDialog.Builder(this).setTitle("Buscar carátula").setView(et)
-            .setPositiveButton("Buscar", new android.content.DialogInterface.OnClickListener() {
-                public void onClick(android.content.DialogInterface d, int w) { buscarCaratulas(s, et.getText().toString().trim()); }
-            }).setNegativeButton("Cancelar", null).show();
+        int pad = (int) (14 * getResources().getDisplayMetrics().density);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(pad, pad / 2, pad, 0);
+        final EditText etTit = new EditText(this);
+        etTit.setHint("Nombre de la canción");
+        etTit.setText(s.title != null ? s.title : "");
+        final EditText etArt = new EditText(this);
+        etArt.setHint("Artista");
+        etArt.setText(s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
+        box.addView(etTit);
+        box.addView(etArt);
+        new AlertDialog.Builder(this).setTitle("Carátula y nombre").setView(box)
+            .setPositiveButton("Buscar carátula", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    buscarCaratulas(s, etTit.getText().toString().trim(), etArt.getText().toString().trim());
+                }
+            })
+            .setNeutralButton("Solo guardar nombre", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    guardarNombre(s, etTit.getText().toString().trim(), etArt.getText().toString().trim());
+                }
+            })
+            .setNegativeButton("Cancelar", null).show();
     }
-    private void buscarCaratulas(final Song s, final String term) {
+    private byte[] artActual(Song s) {
+        if (artCache.containsKey(s.path)) return artCache.get(s.path);
+        try { MediaMetadataRetriever r = new MediaMetadataRetriever(); r.setDataSource(s.path); byte[] p = r.getEmbeddedPicture(); try { r.release(); } catch (Exception e) {} return p; } catch (Exception e) { return null; }
+    }
+    private void aplicarNombre(Song s, String tit, String art) {
+        if (tit != null && tit.length() > 0) s.title = tit;
+        if (art != null && art.length() > 0) s.artist = art;
+    }
+    private void guardarNombre(final Song s, final String tit, final String art) {
+        Toast.makeText(this, "Guardando…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            public void run() {
+                aplicarNombre(s, tit, art);
+                final boolean ok = optEmbed ? embedArt(s, artActual(s)) : true;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        txtTitle.setText(s.title);
+                        txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+                        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                        Toast.makeText(MainActivity.this, ok ? "Nombre guardado" : "No se pudo escribir el MP3", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }).start();
+    }
+    private void buscarCaratulas(final Song s, final String tit, final String art) {
+        final String term = ((art.length() > 0 ? art + " " : "") + tit).trim();
         if (term.length() == 0) return;
         Toast.makeText(this, "Buscando…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
@@ -1408,22 +1494,29 @@ public class MainActivity extends Activity {
                         if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
                         new AlertDialog.Builder(MainActivity.this).setTitle("Elige la carátula")
                             .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
-                                public void onClick(android.content.DialogInterface d, int w) { aplicarCaratula(s, urls.get(w)); }
+                                public void onClick(android.content.DialogInterface d, int w) { aplicarCaratula(s, urls.get(w), tit, art); }
                             }).show();
                     }
                 });
             }
         }).start();
     }
-    private void aplicarCaratula(final Song s, final String url) {
+    private void aplicarCaratula(final Song s, final String url, final String tit, final String art) {
         Toast.makeText(this, "Bajando carátula…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             public void run() {
                 final byte[] img = httpGetBytes(url);
                 if (img != null) {
+                    aplicarNombre(s, tit, art);
                     artCache.put(s.path, img);
                     if (optEmbed) embedArt(s, img);
-                    runOnUiThread(new Runnable() { public void run() { refrescarSiActual(s); Toast.makeText(MainActivity.this, "Carátula actualizada", Toast.LENGTH_SHORT).show(); } });
+                    runOnUiThread(new Runnable() { public void run() {
+                        txtTitle.setText(s.title);
+                        txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+                        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                        refrescarSiActual(s);
+                        Toast.makeText(MainActivity.this, "Carátula y nombre guardados", Toast.LENGTH_SHORT).show();
+                    } });
                 } else runOnUiThread(new Runnable() { public void run() { Toast.makeText(MainActivity.this, "No se pudo bajar", Toast.LENGTH_SHORT).show(); } });
             }
         }).start();
@@ -1518,8 +1611,7 @@ public class MainActivity extends Activity {
     private void pintarPlay(boolean playing) {
         btnPlay.setImageResource(playing ? R.drawable.ic_jfv_pause : R.drawable.ic_jfv_play);
         if (playing) tomarWake(); else liberarWake();
-        try { if (particles != null) { if (efectosOn && playing) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
-        try { if (vizBg != null) { if (efectosOn && playing) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
+        aplicarEfectos();
     }
     private void pintarShuffle() {
         btnShuffle.setTextColor(shuffle ? accent : 0xFF8B8B9A);
