@@ -383,8 +383,9 @@ public class MainActivity extends Activity {
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        if (optVolArranque) { am.setStreamVolume(AudioManager.STREAM_MUSIC, maxv / 2, 0); }
+        if (optVolArranque) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
+        pedirFoco();  // al abrir, tomar prioridad de audio (las otras apps se pausan)
 
         cargarEqGuardado();
         escanearMusica();
@@ -1719,6 +1720,7 @@ public class MainActivity extends Activity {
         super.onResume();
         activo = this;
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
+        pedirFoco();  // reclamar prioridad de audio al volver al frente
     }
     protected void onDestroy() {
         super.onDestroy();
