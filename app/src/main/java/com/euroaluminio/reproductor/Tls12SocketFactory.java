@@ -21,7 +21,9 @@ public class Tls12SocketFactory extends SSLSocketFactory {
     private static final String[] TLS = { "TLSv1", "TLSv1.1", "TLSv1.2" };
 
     public Tls12SocketFactory() throws Exception {
-        SSLContext ctx = SSLContext.getInstance("TLS");
+        SSLContext ctx;
+        try { ctx = SSLContext.getInstance("TLSv1.2"); }
+        catch (Exception e) { ctx = SSLContext.getInstance("TLS"); }
         TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
         tmf.init((KeyStore) null);
         ctx.init(null, tmf.getTrustManagers(), null);
