@@ -30,14 +30,24 @@
             android:layout_height="match_parent"
             android:visibility="gone"/>
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
         <!-- Carátula COMPLETA centrada (sin recortar) -->
         <ImageView
             android:id="@+id/art"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="fitCenter"
-            android:paddingTop="8dp"
-            android:paddingBottom="70dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="14dp"
             android:src="@android:color/transparent"/>
 
         <com.euroaluminio.reproductor.ParticlesView
@@ -54,7 +64,7 @@
             android:layout_gravity="top|left"
             android:layout_margin="12dp"
             android:text="Ajustes"
-            android:textColor="@color/accent"
+            android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="15sp"
             android:background="#77000000"/>
@@ -66,7 +76,7 @@
             android:layout_marginLeft="12dp"
             android:layout_marginTop="62dp"
             android:text="◉ Vista"
-            android:textColor="@color/accent"
+            android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="13sp"
             android:background="#77000000"/>
@@ -77,16 +87,17 @@
             android:layout_gravity="top|right"
             android:layout_margin="12dp"
             android:text="Canciones"
-            android:textColor="@color/accent"
+            android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="15sp"
             android:background="#77000000"/>
+
+        </FrameLayout>
 
         <!-- Panel de abajo estilo Poweramp: controles a la izquierda, info a la derecha -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
             android:orientation="vertical"
             android:background="#77000000"
             android:paddingLeft="14dp"
@@ -109,12 +120,12 @@
                     android:gravity="center_vertical">
                     <Button android:id="@+id/btnShuffle" android:layout_width="wrap_content" android:layout_height="38dp"
                         android:text="Aleat." android:textSize="10sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
-                    <ImageButton android:id="@+id/btnPrev" android:layout_width="44dp" android:layout_height="44dp"
-                        android:src="@android:drawable/ic_media_previous" android:background="@android:color/transparent"/>
-                    <ImageButton android:id="@+id/btnPlay" android:layout_width="54dp" android:layout_height="54dp"
-                        android:src="@android:drawable/ic_media_play" android:background="@android:color/transparent"/>
-                    <ImageButton android:id="@+id/btnNext" android:layout_width="44dp" android:layout_height="44dp"
-                        android:src="@android:drawable/ic_media_next" android:background="@android:color/transparent"/>
+                    <Button android:id="@+id/btnPrev" android:layout_width="48dp" android:layout_height="48dp"
+                        android:text="◀◀" android:textSize="15sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
+                    <Button android:id="@+id/btnPlay" android:layout_width="56dp" android:layout_height="56dp"
+                        android:text="▶" android:textSize="22sp" android:textColor="#FFFFFF" android:background="#33FFFFFF"/>
+                    <Button android:id="@+id/btnNext" android:layout_width="48dp" android:layout_height="48dp"
+                        android:text="▶▶" android:textSize="15sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
                     <Button android:id="@+id/btnRepeat" android:layout_width="wrap_content" android:layout_height="38dp"
                         android:text="Repetir" android:textSize="10sp" android:textColor="#FFFFFF" android:background="@android:color/transparent"/>
                 </LinearLayout>
@@ -156,9 +167,7 @@
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-
-            <!-- Volumen fino (se mueve con el volante) -->
-            <SeekBar android:id="@+id/vol" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
@@ -225,7 +234,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes · v24" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v26" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">

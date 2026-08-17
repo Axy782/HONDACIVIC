@@ -28,7 +28,7 @@ public class VisualizerView extends View {
             if (!corriendo) return;
             paso();
             invalidate();
-            h.postDelayed(this, 45);
+            h.postDelayed(this, 60);
         }
     };
 

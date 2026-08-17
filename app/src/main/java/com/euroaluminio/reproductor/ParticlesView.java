@@ -14,14 +14,14 @@ public class ParticlesView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int color = 0xFFFFB020;
     private boolean corriendo = false, init = false;
-    private static final int N = 55;
+    private static final int N = 26;
     private final float[] px = new float[N], py = new float[N], pvx = new float[N], pvy = new float[N], pr = new float[N], pa = new float[N];
     private final Handler h = new Handler();
     private byte[] fft = null;
     private float bass = 0.3f;
 
     private final Runnable loop = new Runnable() {
-        public void run() { if (!corriendo) return; invalidate(); h.postDelayed(this, 45); }
+        public void run() { if (!corriendo) return; invalidate(); h.postDelayed(this, 60); }
     };
 
     public ParticlesView(Context c) { super(c); }

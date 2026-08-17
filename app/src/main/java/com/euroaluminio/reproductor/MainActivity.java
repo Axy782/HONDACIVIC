@@ -106,8 +106,8 @@ public class MainActivity extends Activity {
     private ImageView imgArtBg;
     private View artScrim;
     private TextView txtTitle, txtArtist, txtCur, txtDur, txtCount;
-    private SeekBar seek, vol;
-    private ImageButton btnPlay, btnPrev, btnNext;
+    private SeekBar seek;
+    private Button btnPlay, btnPrev, btnNext;
     private Button btnShuffle, btnRepeat, btnEq;
     private ListView list;
     private SongAdapter adapter;
@@ -165,11 +165,9 @@ public class MainActivity extends Activity {
         txtDur = (TextView) findViewById(R.id.tDur);
         txtCount = (TextView) findViewById(R.id.count);
         seek = (SeekBar) findViewById(R.id.seek);
-        vol = (SeekBar) findViewById(R.id.vol);
-        btnPlay = (ImageButton) findViewById(R.id.btnPlay);
-        btnPrev = (ImageButton) findViewById(R.id.btnPrev);
-        btnNext = (ImageButton) findViewById(R.id.btnNext);
-        try { btnPrev.setColorFilter(0xFFFFFFFF); btnNext.setColorFilter(0xFFFFFFFF); btnPlay.setColorFilter(0xFFFFFFFF); } catch (Exception e) {}
+        btnPlay = (Button) findViewById(R.id.btnPlay);
+        btnPrev = (Button) findViewById(R.id.btnPrev);
+        btnNext = (Button) findViewById(R.id.btnNext);
         btnShuffle = (Button) findViewById(R.id.btnShuffle);
         btnRepeat = (Button) findViewById(R.id.btnRepeat);
         btnEq = (Button) findViewById(R.id.btnEq);
@@ -197,7 +195,7 @@ public class MainActivity extends Activity {
         optTema = prefs.getString("tema", "ambar");
         optOrden = prefs.getString("orden", "nombre");
         optResume = prefs.getBoolean("resume", true);
-        optAutoplay = prefs.getBoolean("autoplay", false);
+        optAutoplay = prefs.getBoolean("autoplay", true);
         optPausaUsb = prefs.getBoolean("pausaUsb", false);
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque", true);
@@ -342,21 +340,8 @@ public class MainActivity extends Activity {
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        vol.setMax(maxv);
         if (optVolArranque) { am.setStreamVolume(AudioManager.STREAM_MUSIC, maxv / 2, 0); }
-        vol.setProgress(am.getStreamVolume(AudioManager.STREAM_MUSIC));
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
-        volObserver = new android.database.ContentObserver(new Handler()) {
-            public void onChange(boolean self) {
-                try { vol.setProgress(am.getStreamVolume(AudioManager.STREAM_MUSIC)); } catch (Exception e) {}
-            }
-        };
-        try { getContentResolver().registerContentObserver(android.provider.Settings.System.CONTENT_URI, true, volObserver); } catch (Exception e) {}
-        vol.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar s, int p, boolean fromUser){ if(fromUser) am.setStreamVolume(AudioManager.STREAM_MUSIC, p, 0); }
-            public void onStartTrackingTouch(SeekBar s){}
-            public void onStopTrackingTouch(SeekBar s){}
-        });
 
         cargarEqGuardado();
         escanearMusica();
@@ -489,18 +474,20 @@ public class MainActivity extends Activity {
             if (a != null && a.trim().length() > 0) { s.artist = a; txtArtist.setText(a); }
             else txtArtist.setText("Desconocido");
             if (al != null && al.trim().length() > 0) s.album = al;
-            if (pic != null) bmp = BitmapFactory.decodeByteArray(pic, 0, pic.length);
+            if (pic != null) bmp = decodeEscalado(pic, 600);
         } catch (Exception e) {}
         if (bmp == null && artCache.containsKey(s.path)) {
-            try { byte[] c = artCache.get(s.path); bmp = BitmapFactory.decodeByteArray(c, 0, c.length); } catch (Exception e) {}
+            try { byte[] c = artCache.get(s.path); bmp = decodeEscalado(c, 600); } catch (Exception e) {}
         }
         if (bmp != null) {
             imgArt.setImageBitmap(bmp);
             try {
-                Bitmap chico = Bitmap.createScaledBitmap(bmp, 24, 24, true);  // desenfoque barato
-                imgArtBg.setImageBitmap(chico);
-                imgArtBg.setBackgroundColor(0xFF06060A);
-            } catch (Exception e) { imgArtBg.setImageDrawable(null); }
+                int[] cols = coloresDe(bmp);
+                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, cols);
+                imgArtBg.setImageDrawable(null);
+                imgArtBg.setBackgroundDrawable(g);
+            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
             artScrim.setVisibility(View.VISIBLE);
         } else {
             imgArt.setImageDrawable(new ColorDrawable(0x00000000));
@@ -1097,9 +1084,27 @@ public class MainActivity extends Activity {
             return httpGetBytes("http://coverartarchive.org/release/" + mbid + "/front-" + size);
         } catch (Exception e) { return null; }
     }
+    private HttpURLConnection abrirSiguiendo(String u) throws Exception {
+        String cur = u;
+        for (int i = 0; i < 5; i++) {
+            HttpURLConnection c = abrir(cur);
+            c.setInstanceFollowRedirects(false);
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400) {
+                String loc = c.getHeaderField("Location");
+                c.disconnect();
+                if (loc == null || loc.length() == 0) return abrir(cur);
+                if (loc.startsWith("/")) { URL b = new URL(cur); loc = b.getProtocol() + "://" + b.getHost() + loc; }
+                cur = loc;
+                continue;
+            }
+            return c;
+        }
+        return abrir(cur);
+    }
     private String httpGet(String u) {
         try {
-            HttpURLConnection c = abrir(u);
+            HttpURLConnection c = abrirSiguiendo(u);
             InputStream in = c.getInputStream();
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             byte[] b = new byte[4096]; int n;
@@ -1110,7 +1115,7 @@ public class MainActivity extends Activity {
     }
     private byte[] httpGetBytes(String u) {
         try {
-            HttpURLConnection c = abrir(u);
+            HttpURLConnection c = abrirSiguiendo(u);
             InputStream in = c.getInputStream();
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             byte[] b = new byte[8192]; int n;
@@ -1123,7 +1128,8 @@ public class MainActivity extends Activity {
         URL url = new URL(u);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
         c.setConnectTimeout(9000); c.setReadTimeout(12000);
-        c.setRequestProperty("User-Agent", "SonidoJFV");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 4.2.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40 Mobile Safari/537.36");
+        c.setRequestProperty("Accept", "*/*");
         if (c instanceof HttpsURLConnection && Build.VERSION.SDK_INT < 21) {
             try { ((HttpsURLConnection) c).setSSLSocketFactory(new Tls12SocketFactory()); } catch (Exception e) {}
         }
@@ -1219,7 +1225,6 @@ public class MainActivity extends Activity {
         else if (optTema.equals("rojo")) accent = 0xFFEF4444;
         else if (optTema.equals("verde")) accent = 0xFF22C55E;
         else accent = 0xFFFFB020;
-        try { findViewById(R.id.btnPlay).setBackgroundColor(0x00000000); } catch (Exception e) {}
         try { ((Button) findViewById(R.id.btnEq)).setTextColor(0xFFFFFFFF); } catch (Exception e) {}
         try { pintarFav(); } catch (Exception e) {}
         try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
@@ -1432,6 +1437,36 @@ public class MainActivity extends Activity {
         d.setColor(color);
         return d;
     }
+    // Toma dos colores representativos de la carátula para el fondo degradado
+    private int[] coloresDe(Bitmap bmp) {
+        try {
+            Bitmap s = Bitmap.createScaledBitmap(bmp, 4, 4, true);
+            long r1 = 0, g1 = 0, b1 = 0, r2 = 0, g2 = 0, b2 = 0; int n1 = 0, n2 = 0;
+            for (int y = 0; y < 4; y++) for (int x = 0; x < 4; x++) {
+                int px = s.getPixel(x, y); int r = (px >> 16) & 255, g = (px >> 8) & 255, b = px & 255;
+                if (y < 2) { r1 += r; g1 += g; b1 += b; n1++; } else { r2 += r; g2 += g; b2 += b; n2++; }
+            }
+            if (n1 == 0) n1 = 1; if (n2 == 0) n2 = 1;
+            int c1 = oscurecer((int) (r1 / n1), (int) (g1 / n1), (int) (b1 / n1), 0.75f);
+            int c2 = oscurecer((int) (r2 / n2), (int) (g2 / n2), (int) (b2 / n2), 0.45f);
+            return new int[]{ c1, c2 };
+        } catch (Exception e) { return new int[]{ 0xFF1a1a26, 0xFF06060a }; }
+    }
+    private int oscurecer(int r, int g, int b, float f) {
+        return 0xFF000000 | ((int) (r * f) << 16) | ((int) (g * f) << 8) | (int) (b * f);
+    }
+    private Bitmap decodeEscalado(byte[] data, int max) {
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, o);
+            int s = 1;
+            while ((o.outWidth / s) > max || (o.outHeight / s) > max) s *= 2;
+            BitmapFactory.Options o2 = new BitmapFactory.Options();
+            o2.inSampleSize = s;
+            return BitmapFactory.decodeByteArray(data, 0, data.length, o2);
+        } catch (Throwable e) { return null; }
+    }
     private int[] gradienteDe(Song s) {
         int h = ((s.title == null ? "" : s.title) + (s.artist == null ? "" : s.artist)).hashCode();
         int[][] pal = {
@@ -1441,7 +1476,7 @@ public class MainActivity extends Activity {
         return pal[Math.abs(h) % pal.length];
     }
     private void pintarPlay(boolean playing) {
-        btnPlay.setImageResource(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+        btnPlay.setText(playing ? "▮▮" : "▶");
         if (playing) tomarWake(); else liberarWake();
         try { if (particles != null) { if (efectosOn && playing) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
         try { if (vizBg != null) { if (efectosOn && playing) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
