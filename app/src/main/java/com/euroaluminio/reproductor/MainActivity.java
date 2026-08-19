@@ -511,6 +511,14 @@ public class MainActivity extends Activity {
         return n.replace('_', ' ').trim();
     }
 
+    // Nombre a mostrar de una canción: usa el título, y si no hay, saca el nombre del archivo desde el path.
+    private String nombreDe(Song s) {
+        if (s == null) return "";
+        if (s.title != null && s.title.trim().length() > 0) return s.title;
+        if (s.path != null) { try { return limpiarNombre(new File(s.path).getName()); } catch (Exception e) {} }
+        return "";
+    }
+
     // Lee título/artista/carátula reales del archivo que suena
     private void cargarMetadatosActual(Song s) {
         txtTitle.setText(s.title);
@@ -550,7 +558,7 @@ public class MainActivity extends Activity {
             imgArtBg.setBackgroundColor(0xFF000000);
             artScrim.setVisibility(View.GONE);
             if (txtNombreGrande != null) {
-                String nom = (s.title != null && s.title.trim().length() > 0) ? s.title : limpiarNombre(s.name);
+                String nom = nombreDe(s);
                 txtNombreGrande.setText(nom);
                 txtNombreGrande.setVisibility(View.VISIBLE);
             }
@@ -641,8 +649,17 @@ public class MainActivity extends Activity {
     private void construirNombresListas() {
         nombresListas.clear();
         nombresListas.add("Favoritas");
+        // Primero, el orden que el usuario haya guardado
+        try {
+            String s = prefs.getString("ordenListas", "");
+            if (s.length() > 0) {
+                org.json.JSONArray a = new org.json.JSONArray(s);
+                for (int i = 0; i < a.length(); i++) { String k = a.optString(i); if (!k.equals("Favoritas") && listas.has(k) && !nombresListas.contains(k)) nombresListas.add(k); }
+            }
+        } catch (Exception e) {}
+        // Luego, cualquier lista nueva que aún no esté en el orden
         java.util.Iterator<String> it = listas.keys();
-        while (it.hasNext()) { String k = it.next(); if (!k.equals("Favoritas")) nombresListas.add(k); }
+        while (it.hasNext()) { String k = it.next(); if (!k.equals("Favoritas") && !nombresListas.contains(k)) nombresListas.add(k); }
     }
     private Song songPorRuta(String path) {
         for (Carpeta c : carpetas) for (Song s : c.songs) if (s.path.equals(path)) return s;
@@ -732,7 +749,7 @@ public class MainActivity extends Activity {
     private void borrarCancion(final int p) {
         if (p < 0 || p >= cancionesCarpeta.size()) return;
         final Song s = cancionesCarpeta.get(p);
-        String nom = (s.title != null && s.title.length() > 0) ? s.title : s.name;
+        String nom = nombreDe(s);
         new AlertDialog.Builder(this)
             .setTitle("Eliminar canción")
             .setMessage("¿Borrar este archivo del USB?\n\n" + nom + "\n\nEsto no se puede deshacer.")
@@ -1598,13 +1615,84 @@ public class MainActivity extends Activity {
     }
 
     // Opciones de una lista (renombrar / borrar)
-    private void opcionesLista(int pos) {
+    private void opcionesLista(final int pos) {
         if (pos < 0 || pos >= nombresListas.size()) return;
         final String n = nombresListas.get(pos);
-        if (n.equals("Favoritas")) return;
-        new AlertDialog.Builder(this).setTitle(n).setItems(new String[]{ "Renombrar", "Borrar" }, new android.content.DialogInterface.OnClickListener() {
-            public void onClick(android.content.DialogInterface d, int w) { if (w == 0) renombrarLista(n); else borrarLista(n); }
+        final boolean esFav = n.equals("Favoritas");
+        final String[] ops = esFav
+            ? new String[]{ "Ordenar A-Z", "Ordenar por artista", "Vaciar lista" }
+            : new String[]{ "Renombrar", "Ordenar A-Z", "Ordenar por artista", "Subir", "Bajar", "Vaciar lista", "Borrar" };
+        new AlertDialog.Builder(this).setTitle(n).setItems(ops, new android.content.DialogInterface.OnClickListener() {
+            public void onClick(android.content.DialogInterface d, int w) {
+                if (esFav) {
+                    if (w == 0) ordenarLista(n, 0);
+                    else if (w == 1) ordenarLista(n, 1);
+                    else vaciarLista(n);
+                } else {
+                    switch (w) {
+                        case 0: renombrarLista(n); break;
+                        case 1: ordenarLista(n, 0); break;
+                        case 2: ordenarLista(n, 1); break;
+                        case 3: moverLista(pos, -1); break;
+                        case 4: moverLista(pos, 1); break;
+                        case 5: vaciarLista(n); break;
+                        case 6: borrarLista(n); break;
+                    }
+                }
+            }
         }).show();
+    }
+    // Mover una lista arriba/abajo (dir = -1 sube, +1 baja). Favoritas queda fija en el tope.
+    private void moverLista(int pos, int dir) {
+        int j = pos + dir;
+        if (pos <= 0 || j <= 0 || pos >= nombresListas.size() || j >= nombresListas.size()) return;
+        String tmp = nombresListas.get(pos); nombresListas.set(pos, nombresListas.get(j)); nombresListas.set(j, tmp);
+        guardarOrdenListas();
+        adapter.notifyDataSetChanged();
+    }
+    private void guardarOrdenListas() {
+        org.json.JSONArray a = new org.json.JSONArray();
+        for (int i = 0; i < nombresListas.size(); i++) { if (!nombresListas.get(i).equals("Favoritas")) a.put(nombresListas.get(i)); }
+        prefs.edit().putString("ordenListas", a.toString()).apply();
+    }
+    // Ordena las canciones dentro de la lista (criterio 0 = título, 1 = artista)
+    private void ordenarLista(final String n, final int criterio) {
+        try {
+            org.json.JSONArray a = listas.getJSONArray(n);
+            java.util.ArrayList<String> rutas = new java.util.ArrayList<String>();
+            for (int i = 0; i < a.length(); i++) rutas.add(a.optString(i));
+            java.util.Collections.sort(rutas, new java.util.Comparator<String>() {
+                public int compare(String p1, String p2) {
+                    return claveOrden(songPorRuta(p1), criterio).compareToIgnoreCase(claveOrden(songPorRuta(p2), criterio));
+                }
+            });
+            org.json.JSONArray na = new org.json.JSONArray();
+            for (int i = 0; i < rutas.size(); i++) na.put(rutas.get(i));
+            listas.put(n, na); guardarListas();
+            if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista && n.equals(carpetaAbierta.name)) {
+                ArrayList<Song> arr = new ArrayList<Song>();
+                for (int i = 0; i < na.length(); i++) { Song s = songPorRuta(na.optString(i)); if (s != null) arr.add(s); }
+                carpetaAbierta.songs = arr; cancionesCarpeta = arr; adapter.notifyDataSetChanged();
+            }
+            Toast.makeText(this, "Lista ordenada", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {}
+    }
+    private String claveOrden(Song s, int criterio) {
+        if (s == null) return "";
+        if (criterio == 1) return (s.artist != null ? s.artist : "") + " " + (s.title != null ? s.title : "");
+        return (s.title != null && s.title.length() > 0) ? s.title : nombreDe(s);
+    }
+    private void vaciarLista(final String n) {
+        new AlertDialog.Builder(this).setMessage("¿Quitar TODAS las canciones de \"" + n + "\"?\n(La lista no se borra, queda vacía.)")
+            .setPositiveButton("Vaciar", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    try { listas.put(n, new org.json.JSONArray()); guardarListas(); } catch (Exception e) {}
+                    if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista && n.equals(carpetaAbierta.name)) {
+                        carpetaAbierta.songs = new ArrayList<Song>(); cancionesCarpeta = carpetaAbierta.songs;
+                    }
+                    calcularPortadasListas(); adapter.notifyDataSetChanged(); actualizarHeaderLista();
+                }
+            }).setNegativeButton("Cancelar", null).show();
     }
     private void renombrarLista(final String n) {
         final EditText et = new EditText(this); et.setText(n);
@@ -1613,14 +1701,16 @@ public class MainActivity extends Activity {
                 String nn = et.getText().toString().trim();
                 if (nn.length() > 0 && !nn.equals(n)) {
                     try { listas.put(nn, listas.getJSONArray(n)); listas.remove(n); guardarListas(); } catch (Exception e) {}
-                    construirNombresListas(); adapter.notifyDataSetChanged(); actualizarHeaderLista();
+                    // conservar la posición en el orden guardado
+                    try { String s = prefs.getString("ordenListas", ""); if (s.length() > 0) { org.json.JSONArray a = new org.json.JSONArray(s); for (int i = 0; i < a.length(); i++) { if (a.optString(i).equals(n)) a.put(i, nn); } prefs.edit().putString("ordenListas", a.toString()).apply(); } } catch (Exception e) {}
+                    construirNombresListas(); calcularPortadasListas(); adapter.notifyDataSetChanged(); actualizarHeaderLista();
                 }
             }
         }).setNegativeButton("Cancelar", null).show();
     }
     private void borrarLista(final String n) {
         new AlertDialog.Builder(this).setMessage("¿Borrar la lista \"" + n + "\"?").setPositiveButton("Borrar", new android.content.DialogInterface.OnClickListener() {
-            public void onClick(android.content.DialogInterface d, int w) { listas.remove(n); guardarListas(); construirNombresListas(); adapter.notifyDataSetChanged(); actualizarHeaderLista(); }
+            public void onClick(android.content.DialogInterface d, int w) { listas.remove(n); guardarListas(); construirNombresListas(); calcularPortadasListas(); adapter.notifyDataSetChanged(); actualizarHeaderLista(); }
         }).setNegativeButton("Cancelar", null).show();
     }
 
