@@ -99,6 +99,16 @@ public class MainActivity extends Activity {
             }
         }
     };
+    // Detecta si el radio está en mute/silencio (por hardware o volumen en 0)
+    private boolean estaEnMute() {
+        try {
+            java.lang.reflect.Method m = AudioManager.class.getMethod("isStreamMute", int.class);
+            Object r = m.invoke(am, AudioManager.STREAM_MUSIC);
+            if (r instanceof Boolean && ((Boolean) r).booleanValue()) return true;
+        } catch (Exception e) {}
+        try { if (am.getStreamVolume(AudioManager.STREAM_MUSIC) == 0) return true; } catch (Exception e) {}
+        return false;
+    }
     private void pedirFoco() {
         try { am.requestAudioFocus(focoListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN); } catch (Exception e) {}
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
@@ -168,7 +178,7 @@ public class MainActivity extends Activity {
     private final ArrayList<String> nombresListas = new ArrayList<String>();
     // Opciones extra
     private String optCalidad = "alta", optTema = "ambar", optOrden = "nombre";
-    private boolean optResume = true, optAutoplay = false, optPausaUsb = false, optPantalla = false, optVolArranque = true;
+    private boolean optResume = true, optAutoplay = false, optPausaUsb = false, optPantalla = false, optVolArranque = false;
     private static boolean volYaAplicado = false;  // estático: sobrevive a recrear la app (cámara), se reinicia al matar el proceso (arranque real)
     private int accent = 0xFFFFB020;
     private android.os.PowerManager.WakeLock wakeCpu = null;
@@ -242,7 +252,7 @@ public class MainActivity extends Activity {
         optAutoplay = prefs.getBoolean("autoplay", true);
         optPausaUsb = prefs.getBoolean("pausaUsb", false);
         optPantalla = prefs.getBoolean("pantalla", false);
-        optVolArranque = prefs.getBoolean("volArranque", true);
+        optVolArranque = prefs.getBoolean("volArranque2", false);
         efectosOn = prefs.getBoolean("efectos", true);
         efectoModo = prefs.getInt("efectoModo", 3);
         aplicarTema();
@@ -325,7 +335,7 @@ public class MainActivity extends Activity {
         final CheckBox chkVolArranque = (CheckBox) findViewById(R.id.chkVolArranque);
         chkResume.setChecked(optResume); chkAutoplay.setChecked(optAutoplay); chkPausaUsb.setChecked(optPausaUsb); chkPantalla.setChecked(optPantalla);
         chkVolArranque.setChecked(optVolArranque);
-        chkVolArranque.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optVolArranque=c; prefs.edit().putBoolean("volArranque",c).apply(); }});
+        chkVolArranque.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optVolArranque=c; prefs.edit().putBoolean("volArranque2",c).apply(); }});
         chkResume.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optResume=c; prefs.edit().putBoolean("resume",c).apply(); }});
         chkAutoplay.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optAutoplay=c; prefs.edit().putBoolean("autoplay",c).apply(); }});
         chkPausaUsb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optPausaUsb=c; prefs.edit().putBoolean("pausaUsb",c).apply(); }});
@@ -387,12 +397,11 @@ public class MainActivity extends Activity {
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        // Volumen al arrancar: SOLO una vez por arranque real y NUNCA si el radio está en mute/silencio.
-        // (Antes se re-ejecutaba al volver de la cámara de retroceso y le quitaba el mute.)
+        // Volumen al arrancar: APAGADO por defecto. Aunque se encienda, solo una vez por arranque
+        // real y NUNCA si el radio está en mute (así no se cancela el silencio al volver de la cámara).
         if (optVolArranque && !volYaAplicado) {
             volYaAplicado = true;
-            int actual = am.getStreamVolume(AudioManager.STREAM_MUSIC);
-            if (actual > 0) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
+            if (!estaEnMute()) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
         }
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         pedirFoco();  // al abrir, tomar prioridad de audio (las otras apps se pausan)
