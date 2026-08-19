@@ -143,6 +143,7 @@ public class MainActivity extends Activity {
     private ImageView imgArtBg;
     private View artScrim;
     private TextView txtTitle, txtArtist, txtCur, txtDur, txtCount;
+    private TextView txtNombreGrande;
     private SeekBar seek;
     private ImageButton btnPlay, btnPrev, btnNext;
     private Button btnShuffle, btnRepeat, btnEq;
@@ -168,6 +169,7 @@ public class MainActivity extends Activity {
     // Opciones extra
     private String optCalidad = "alta", optTema = "ambar", optOrden = "nombre";
     private boolean optResume = true, optAutoplay = false, optPausaUsb = false, optPantalla = false, optVolArranque = true;
+    private static boolean volYaAplicado = false;  // estático: sobrevive a recrear la app (cámara), se reinicia al matar el proceso (arranque real)
     private int accent = 0xFFFFB020;
     private android.os.PowerManager.WakeLock wakeCpu = null;
     private android.content.BroadcastReceiver usbReceiver = null;
@@ -200,6 +202,7 @@ public class MainActivity extends Activity {
         imgArt = (ImageView) findViewById(R.id.art);
         imgArtBg = (ImageView) findViewById(R.id.artBg);
         artScrim = findViewById(R.id.artScrim);
+        txtNombreGrande = (TextView) findViewById(R.id.txtNombreGrande);
         txtTitle = (TextView) findViewById(R.id.title);
         txtArtist = (TextView) findViewById(R.id.artist);
         txtCur = (TextView) findViewById(R.id.tCur);
@@ -308,6 +311,7 @@ public class MainActivity extends Activity {
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
             public boolean onItemLongClick(AdapterView<?> p, View v, int position, long id){
                 if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista) { quitarDeListaActual(position); return true; }
+                if (modo == 1 && carpetaAbierta != null && !carpetaAbierta.esLista) { borrarCancion(position); return true; }
                 if (modo == 0 && tab == 1) { opcionesLista(position); return true; }
                 return false;
             }
@@ -383,7 +387,13 @@ public class MainActivity extends Activity {
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        if (optVolArranque) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
+        // Volumen al arrancar: SOLO una vez por arranque real y NUNCA si el radio está en mute/silencio.
+        // (Antes se re-ejecutaba al volver de la cámara de retroceso y le quitaba el mute.)
+        if (optVolArranque && !volYaAplicado) {
+            volYaAplicado = true;
+            int actual = am.getStreamVolume(AudioManager.STREAM_MUSIC);
+            if (actual > 0) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
+        }
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         pedirFoco();  // al abrir, tomar prioridad de audio (las otras apps se pausan)
 
@@ -525,6 +535,7 @@ public class MainActivity extends Activity {
         }
         if (bmp != null) {
             imgArt.setImageBitmap(bmp);
+            if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
             try {
                 // Difuminado suave tipo Poweramp: reducir mucho y dejar que el ImageView agrande con filtrado
                 Bitmap chico = Bitmap.createScaledBitmap(bmp, 16, 16, true);
@@ -533,14 +544,16 @@ public class MainActivity extends Activity {
             } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
             artScrim.setVisibility(View.VISIBLE);
         } else {
+            // Sin carátula: fondo NEGRO + nombre de la canción en grande
             imgArt.setImageDrawable(new ColorDrawable(0x00000000));
-            try {
-                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, gradienteDe(s));
-                imgArtBg.setImageDrawable(null);
-                imgArtBg.setBackgroundDrawable(g);
-            } catch (Exception e) { imgArtBg.setBackgroundColor(0xFF262633); }
+            imgArtBg.setImageDrawable(null);
+            imgArtBg.setBackgroundColor(0xFF000000);
             artScrim.setVisibility(View.GONE);
+            if (txtNombreGrande != null) {
+                String nom = (s.title != null && s.title.trim().length() > 0) ? s.title : limpiarNombre(s.name);
+                txtNombreGrande.setText(nom);
+                txtNombreGrande.setVisibility(View.VISIBLE);
+            }
         }
         if (animDir != 0) {
             try {
@@ -711,6 +724,39 @@ public class MainActivity extends Activity {
                 public void onClick(android.content.DialogInterface d, int w) {
                     try { org.json.JSONArray a = listas.getJSONArray(carpetaAbierta.name); int idx = indiceEnArray(a, s.path); if (idx >= 0) { listas.put(carpetaAbierta.name, sinIndice(a, idx)); guardarListas(); } } catch (Exception e) {}
                     cancionesCarpeta.remove(p); adapter.notifyDataSetChanged(); actualizarHeaderLista();
+                }
+            }).setNegativeButton("Cancelar", null).show();
+    }
+
+    // Eliminar una canción del USB (borrado real del archivo)
+    private void borrarCancion(final int p) {
+        if (p < 0 || p >= cancionesCarpeta.size()) return;
+        final Song s = cancionesCarpeta.get(p);
+        String nom = (s.title != null && s.title.length() > 0) ? s.title : s.name;
+        new AlertDialog.Builder(this)
+            .setTitle("Eliminar canción")
+            .setMessage("¿Borrar este archivo del USB?\n\n" + nom + "\n\nEsto no se puede deshacer.")
+            .setPositiveButton("Eliminar", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    Song sonando = cancionActual();
+                    boolean eraLaQueSuena = (sonando != null && sonando.path != null && sonando.path.equals(s.path));
+                    if (eraLaQueSuena) {
+                        try { if (mp != null) { mp.stop(); mp.reset(); } } catch (Exception e) {}
+                        prepared = false; pintarPlay(false);
+                    }
+                    boolean borrado = false;
+                    try { borrado = new File(s.path).delete(); } catch (Exception e) {}
+                    if (borrado) {
+                        cancionesCarpeta.remove(p);
+                        for (int i = songs.size() - 1; i >= 0; i--) { if (songs.get(i).path != null && songs.get(i).path.equals(s.path)) songs.remove(i); }
+                        construirOrden();
+                        if (!eraLaQueSuena && sonando != null) { int ix = songs.indexOf(sonando); posEnOrden = (ix >= 0) ? order.indexOf(ix) : posEnOrden; }
+                        adapter.notifyDataSetChanged();
+                        actualizarHeaderLista();
+                        Toast.makeText(MainActivity.this, "Canción eliminada del USB", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "No se pudo borrar (¿USB de solo lectura?)", Toast.LENGTH_LONG).show();
+                    }
                 }
             }).setNegativeButton("Cancelar", null).show();
     }
@@ -1363,15 +1409,28 @@ public class MainActivity extends Activity {
         try {
             usbReceiver = new android.content.BroadcastReceiver() {
                 public void onReceive(Context c, android.content.Intent i) {
-                    if (optPausaUsb && mp != null && prepared && mp.isPlaying()) { mp.pause(); pintarPlay(false); }
+                    if (optPausaUsb && mp != null) {
+                        try { mp.stop(); } catch (Exception e) {}   // stop suelta el búfer -> corta al instante
+                        prepared = false;
+                        pintarPlay(false);
+                    }
                 }
             };
             android.content.IntentFilter f = new android.content.IntentFilter();
             f.addAction(android.content.Intent.ACTION_MEDIA_EJECT);
             f.addAction(android.content.Intent.ACTION_MEDIA_UNMOUNTED);
             f.addAction(android.content.Intent.ACTION_MEDIA_REMOVED);
+            f.addAction(android.content.Intent.ACTION_MEDIA_BAD_REMOVAL);
+            f.addAction(android.content.Intent.ACTION_MEDIA_CHECKING);
             f.addDataScheme("file");
             registerReceiver(usbReceiver, f);
+            // Segundo receptor sin scheme (algunos radios no mandan el "file")
+            android.content.IntentFilter f2 = new android.content.IntentFilter();
+            f2.addAction(android.content.Intent.ACTION_MEDIA_EJECT);
+            f2.addAction(android.content.Intent.ACTION_MEDIA_UNMOUNTED);
+            f2.addAction(android.content.Intent.ACTION_MEDIA_REMOVED);
+            f2.addAction(android.content.Intent.ACTION_MEDIA_BAD_REMOVAL);
+            registerReceiver(usbReceiver, f2);
         } catch (Exception e) {}
     }
 

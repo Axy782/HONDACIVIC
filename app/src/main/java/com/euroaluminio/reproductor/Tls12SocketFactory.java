@@ -34,10 +34,26 @@ public class Tls12SocketFactory extends SSLSocketFactory {
     private Socket habilitar(Socket s, String host) {
         if (s instanceof SSLSocket) {
             SSLSocket ss = (SSLSocket) s;
-            try { ss.setEnabledProtocols(TLS); } catch (Exception e) {
-                try { ss.setEnabledProtocols(new String[]{ "TLSv1.2" }); } catch (Exception e2) {}
+            // 1) Forzar TLS 1.2 (y 1.1 de respaldo)
+            try { ss.setEnabledProtocols(new String[]{ "TLSv1.2", "TLSv1.1" }); } catch (Exception e) {
+                try { ss.setEnabledProtocols(new String[]{ "TLSv1.2" }); } catch (Exception e2) {
+                    try { ss.setEnabledProtocols(TLS); } catch (Exception e3) {}
+                }
             }
-            // SNI: indicar el nombre del servidor (imprescindible en Android viejo con CDNs modernos)
+            // 2) CLAVE: activar TODOS los cifrados que el equipo soporta.
+            //    Android 4.2.2 tiene cifrados modernos (ECDHE-GCM) pero vienen APAGADOS por defecto;
+            //    sin esto, los CDN modernos (Apple/Deezer) rechazan el saludo -> "unsupported protocol".
+            try {
+                String[] sup = ss.getSupportedCipherSuites();
+                java.util.ArrayList<String> lista = new java.util.ArrayList<String>();
+                for (int i = 0; i < sup.length; i++) {
+                    String c = sup[i];
+                    if (c.indexOf("_EMPTY_") >= 0 || c.indexOf("_NULL_") >= 0 || c.indexOf("_anon_") >= 0) continue;
+                    lista.add(c);
+                }
+                ss.setEnabledCipherSuites(lista.toArray(new String[lista.size()]));
+            } catch (Exception e) {}
+            // 3) SNI: indicar el nombre del servidor (imprescindible en Android viejo con CDNs modernos)
             if (host != null) {
                 try { ss.getClass().getMethod("setHostname", String.class).invoke(ss, host); } catch (Exception e) {}
             }
