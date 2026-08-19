@@ -99,6 +99,21 @@ public class MainActivity extends Activity {
             }
         }
     };
+    // Instala Conscrypt (TLS moderno con BoringSSL, como Chrome/Poweramp) como proveedor #1.
+    // Así el radio viejo puede hacer el saludo de seguridad con servidores actuales (Apple/Deezer).
+    private void instalarConscrypt() {
+        try {
+            java.security.Security.insertProviderAt(org.conscrypt.Conscrypt.newProvider(), 1);
+            javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLSv1.2");
+            sc.init(null, null, null);
+            conscryptFactory = sc.getSocketFactory();
+            javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(conscryptFactory);
+            conscryptOk = true;
+        } catch (Throwable t) { conscryptOk = false; }
+    }
+    private boolean conscryptOk = false;
+    private javax.net.ssl.SSLSocketFactory conscryptFactory = null;
+
     // Detecta si el radio está en mute/silencio (por hardware o volumen en 0)
     private boolean estaEnMute() {
         try {
@@ -201,6 +216,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        instalarConscrypt();  // TLS moderno dentro de la app (para el radio viejo)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("sonido", MODE_PRIVATE);
@@ -249,7 +265,7 @@ public class MainActivity extends Activity {
         optTema = prefs.getString("tema", "ambar");
         optOrden = prefs.getString("orden", "nombre");
         optResume = prefs.getBoolean("resume", true);
-        optAutoplay = prefs.getBoolean("autoplay", true);
+        optAutoplay = prefs.getBoolean("autoplay2", false);
         optPausaUsb = prefs.getBoolean("pausaUsb", false);
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque2", false);
@@ -337,7 +353,7 @@ public class MainActivity extends Activity {
         chkVolArranque.setChecked(optVolArranque);
         chkVolArranque.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optVolArranque=c; prefs.edit().putBoolean("volArranque2",c).apply(); }});
         chkResume.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optResume=c; prefs.edit().putBoolean("resume",c).apply(); }});
-        chkAutoplay.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optAutoplay=c; prefs.edit().putBoolean("autoplay",c).apply(); }});
+        chkAutoplay.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optAutoplay=c; prefs.edit().putBoolean("autoplay2",c).apply(); }});
         chkPausaUsb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optPausaUsb=c; prefs.edit().putBoolean("pausaUsb",c).apply(); }});
         chkPantalla.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optPantalla=c; prefs.edit().putBoolean("pantalla",c).apply(); aplicarPantalla(); }});
 
@@ -404,7 +420,8 @@ public class MainActivity extends Activity {
             if (!estaEnMute()) { am.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (maxv * 0.30), 0); }
         }
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
-        pedirFoco();  // al abrir, tomar prioridad de audio (las otras apps se pausan)
+        // Ya NO pedimos prioridad de audio al abrir: eso hacía que el radio quitara el mute
+        // al volver de la cámara. Solo se pide cuando el usuario le da play.
 
         cargarEqGuardado();
         escanearMusica();
@@ -1293,8 +1310,14 @@ public class MainActivity extends Activity {
         c.setConnectTimeout(9000); c.setReadTimeout(12000);
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 4.2.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40 Mobile Safari/537.36");
         c.setRequestProperty("Accept", "*/*");
-        if (c instanceof HttpsURLConnection && Build.VERSION.SDK_INT < 21) {
-            try { ((HttpsURLConnection) c).setSSLSocketFactory(new Tls12SocketFactory()); } catch (Exception e) {}
+        if (c instanceof HttpsURLConnection) {
+            if (conscryptOk && conscryptFactory != null) {
+                // Conscrypt cargó: usar su TLS moderno (como Poweramp)
+                try { ((HttpsURLConnection) c).setSSLSocketFactory(conscryptFactory); } catch (Exception e) {}
+            } else if (Build.VERSION.SDK_INT < 21) {
+                // Respaldo: si Conscrypt no cargó, intentar con el candado del sistema
+                try { ((HttpsURLConnection) c).setSSLSocketFactory(new Tls12SocketFactory()); } catch (Exception e) {}
+            }
         }
         return c;
     }
@@ -1587,7 +1610,7 @@ public class MainActivity extends Activity {
                 } catch (Exception e) { falloRed[0] = true; }
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "No se pudo conectar. Detalle: " + (ultimoError.length() > 0 ? ultimoError : "desconocido"), Toast.LENGTH_LONG).show(); return; }
+                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "No se pudo conectar. [Conscrypt: " + (conscryptOk ? "SÍ" : "NO") + "] Detalle: " + (ultimoError.length() > 0 ? ultimoError : "desconocido"), Toast.LENGTH_LONG).show(); return; }
                         if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
                         new AlertDialog.Builder(MainActivity.this).setTitle("Elige la carátula")
                             .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
@@ -1888,8 +1911,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         activo = this;
+        // Registrar teclas del volante SIN pedir prioridad de audio (para no quitar el mute al volver de la cámara)
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
-        pedirFoco();  // reclamar prioridad de audio al volver al frente
     }
     protected void onDestroy() {
         super.onDestroy();

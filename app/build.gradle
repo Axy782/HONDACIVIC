@@ -28,4 +28,7 @@ android {
 }
 
 dependencies {
+    // Seguridad TLS moderna dentro de la app (como hace Poweramp) para que el radio viejo
+    // pueda conectar a servidores actuales. Versión 2.1.0: reportada funcionando en Android 4.1-4.2 (API 16-17).
+    implementation 'org.conscrypt:conscrypt-android:2.1.0'
 }
