@@ -1190,20 +1190,28 @@ public class MainActivity extends Activity {
     private String pxCal() { return optCalidad.equals("maxima") ? "1200x1200" : optCalidad.equals("normal") ? "300x300" : "600x600"; }
     private byte[] artDeItunes(String term) {
         try {
-            String url = "https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + URLEncoder.encode(term, "UTF-8");
-            String json = httpGet(url); if (json == null) return null;
+            String q = URLEncoder.encode(term, "UTF-8");
+            // HTTP primero (el radio viejo no puede con el TLS moderno); HTTPS de respaldo
+            String json = httpGet("http://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + q);
+            if (json == null) json = httpGet("https://itunes.apple.com/search?media=music&entity=song&limit=1&term=" + q);
+            if (json == null) return null;
             org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
             if (arr == null || arr.length() == 0) return null;
             String art = arr.getJSONObject(0).optString("artworkUrl100", "");
             if (art.length() == 0) return null;
             art = art.replace("100x100", pxCal());
-            return httpGetBytes(art);
+            String artHttp = art.startsWith("https://") ? "http://" + art.substring(8) : art;
+            byte[] img = httpGetBytes(artHttp);
+            if (img == null && !artHttp.equals(art)) img = httpGetBytes(art);  // respaldo HTTPS
+            return img;
         } catch (Exception e) { return null; }
     }
     private byte[] artDeDeezer(String term) {
         try {
-            String url = "https://api.deezer.com/search?limit=1&q=" + URLEncoder.encode(term, "UTF-8");
-            String json = httpGet(url); if (json == null) return null;
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("http://api.deezer.com/search?limit=1&q=" + q);
+            if (json == null) json = httpGet("https://api.deezer.com/search?limit=1&q=" + q);
+            if (json == null) return null;
             org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("data");
             if (arr == null || arr.length() == 0) return null;
             org.json.JSONObject alb = arr.getJSONObject(0).optJSONObject("album");
@@ -1211,7 +1219,10 @@ public class MainActivity extends Activity {
             String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
             String art = alb.optString(key, alb.optString("cover_big", alb.optString("cover", "")));
             if (art.length() == 0) return null;
-            return httpGetBytes(art);
+            String artHttp = art.startsWith("https://") ? "http://" + art.substring(8) : art;
+            byte[] img = httpGetBytes(artHttp);
+            if (img == null && !artHttp.equals(art)) img = httpGetBytes(art);  // respaldo HTTPS
+            return img;
         } catch (Exception e) { return null; }
     }
     private byte[] artDeMusicBrainz(String term) {
