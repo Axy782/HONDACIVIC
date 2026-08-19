@@ -571,16 +571,25 @@ public class MainActivity extends Activity {
             imgArt.setImageBitmap(bmp);
             if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
             try {
-                // Difuminado suave tipo Poweramp: reducir mucho y dejar que el ImageView agrande con filtrado
-                Bitmap chico = Bitmap.createScaledBitmap(bmp, 16, 16, true);
-                imgArtBg.setImageBitmap(chico);
+                // Fondo estilo Poweramp: desenfoque suave + colores vivos sacados de la carátula
+                Bitmap fondo = desenfocar(bmp, 60, 7);
+                if (fondo == null) fondo = Bitmap.createScaledBitmap(bmp, 20, 20, true);
+                imgArtBg.setImageBitmap(fondo);
                 imgArtBg.setBackgroundColor(0xFF06060A);
+                // Subir saturación (colores más llamativos) y oscurecer un poco (para que resalte la portada)
+                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
+                cm.setSaturation(1.5f);
+                android.graphics.ColorMatrix osc = new android.graphics.ColorMatrix();
+                osc.setScale(0.72f, 0.72f, 0.72f, 1f);
+                cm.postConcat(osc);
+                imgArtBg.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
             } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
             artScrim.setVisibility(View.VISIBLE);
         } else {
             // Sin carátula: fondo NEGRO + nombre de la canción en grande
             imgArt.setImageDrawable(new ColorDrawable(0x00000000));
             imgArtBg.setImageDrawable(null);
+            imgArtBg.setColorFilter(null);
             imgArtBg.setBackgroundColor(0xFF000000);
             artScrim.setVisibility(View.GONE);
             if (txtNombreGrande != null) {
@@ -1327,19 +1336,33 @@ public class MainActivity extends Activity {
         try {
             if (!s.path.toLowerCase(Locale.US).endsWith(".mp3")) return false;
             File f = new File(s.path);
-            if (!f.canWrite()) { /* intentamos igual */ }
-            byte[] buf = leerArchivo(f);
+            // Averiguar el tamaño del tag ID3 viejo leyendo SOLO los primeros 10 bytes (no todo el archivo)
             int start = 0;
-            if (buf.length > 10 && (buf[0] & 0xff) == 0x49 && (buf[1] & 0xff) == 0x44 && (buf[2] & 0xff) == 0x33) {
-                start = 10 + ((buf[6] & 127) * 2097152 + (buf[7] & 127) * 16384 + (buf[8] & 127) * 128 + (buf[9] & 127));
+            FileInputStream head = new FileInputStream(f);
+            byte[] h = new byte[10];
+            int leidos = head.read(h);
+            head.close();
+            if (leidos == 10 && (h[0] & 0xff) == 0x49 && (h[1] & 0xff) == 0x44 && (h[2] & 0xff) == 0x33) {
+                start = 10 + ((h[6] & 127) * 2097152 + (h[7] & 127) * 16384 + (h[8] & 127) * 128 + (h[9] & 127));
             }
             byte[] tag = construirTag(s, img);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(tag);
-            fos.write(buf, start, buf.length - start);
-            fos.close();
-            return true;
-        } catch (Exception e) { return false; }
+            // Escribir a un archivo temporal por PEDAZOS (streaming), sin cargar el MP3 completo en memoria
+            File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+            FileInputStream in = new FileInputStream(f);
+            long porSaltar = start;
+            while (porSaltar > 0) { long sk = in.skip(porSaltar); if (sk <= 0) break; porSaltar -= sk; }
+            FileOutputStream out = new FileOutputStream(tmp);
+            out.write(tag);
+            byte[] chunk = new byte[65536];  // 64 KB por vuelta
+            int n;
+            while ((n = in.read(chunk)) > 0) out.write(chunk, 0, n);
+            in.close(); out.flush(); out.close();
+            // Reemplazar el original por el temporal
+            if (f.delete() && tmp.renameTo(f)) return true;
+            // Si el rename falla, intentar copiar de vuelta
+            tmp.delete();
+            return false;
+        } catch (Throwable t) { return false; }
     }
     private byte[] leerArchivo(File f) throws Exception {
         InputStream in = new java.io.FileInputStream(f);
@@ -1792,6 +1815,27 @@ public class MainActivity extends Activity {
             o2.inSampleSize = s;
             return BitmapFactory.decodeByteArray(data, 0, data.length, o2);
         } catch (Throwable e) { return null; }
+    }
+    // Desenfoque suave estilo Poweramp: reduce la carátula a un tamaño pequeño y le aplica
+    // un box blur de 2 pasadas (horizontal + vertical). Es liviano (imagen chica) y se ve cremoso.
+    private Bitmap desenfocar(Bitmap src, int size, int radio) {
+        try {
+            Bitmap sm = Bitmap.createScaledBitmap(src, size, size, true);
+            int w = sm.getWidth(), h = sm.getHeight();
+            int[] a = new int[w * h]; sm.getPixels(a, 0, w, 0, 0, w, h);
+            int[] b = new int[w * h];
+            for (int pass = 0; pass < 2; pass++) {
+                for (int y = 0; y < h; y++) { int off = y * w;
+                    for (int x = 0; x < w; x++) { int r = 0, g = 0, bl = 0, cnt = 0;
+                        for (int k = -radio; k <= radio; k++) { int xx = x + k; if (xx < 0) xx = 0; else if (xx >= w) xx = w - 1; int p = a[off + xx]; r += (p >> 16) & 0xff; g += (p >> 8) & 0xff; bl += p & 0xff; cnt++; }
+                        b[off + x] = 0xff000000 | ((r / cnt) << 16) | ((g / cnt) << 8) | (bl / cnt); } }
+                for (int x = 0; x < w; x++) {
+                    for (int y = 0; y < h; y++) { int r = 0, g = 0, bl = 0, cnt = 0;
+                        for (int k = -radio; k <= radio; k++) { int yy = y + k; if (yy < 0) yy = 0; else if (yy >= h) yy = h - 1; int p = b[yy * w + x]; r += (p >> 16) & 0xff; g += (p >> 8) & 0xff; bl += p & 0xff; cnt++; }
+                        a[y * w + x] = 0xff000000 | ((r / cnt) << 16) | ((g / cnt) << 8) | (bl / cnt); } }
+            }
+            return Bitmap.createBitmap(a, w, h, Bitmap.Config.ARGB_8888);
+        } catch (Throwable t) { return null; }
     }
     private int[] gradienteDe(Song s) {
         int h = ((s.title == null ? "" : s.title) + (s.artist == null ? "" : s.artist)).hashCode();
