@@ -169,6 +169,8 @@
                             android:text="+ Lista" android:textStyle="bold" android:textColor="#FFFFFF" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
                         <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="42dp"
                             android:text="EQ" android:textColor="#FFFFFF" android:textStyle="bold" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
+                        <Button android:id="@+id/btnBorrarActual" android:layout_width="wrap_content" android:layout_height="42dp"
+                            android:text="Borrar" android:textSize="12sp" android:textStyle="bold" android:textColor="#FFFFFF" android:background="#33FFFFFF" android:layout_marginLeft="6dp"/>
                     </LinearLayout>
 
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -216,6 +218,18 @@
                 android:background="@color/surface" android:layout_marginLeft="6dp" android:visibility="gone"/>
         </LinearLayout>
 
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="8dp">
+            <EditText android:id="@+id/etBuscar" android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:hint="Buscar cancion..." android:textColorHint="@color/muted"
+                android:textColor="@color/text" android:textSize="16sp" android:singleLine="true"
+                android:background="@color/surface2" android:paddingLeft="14dp" android:paddingRight="14dp"
+                android:inputType="text" android:imeOptions="actionSearch"/>
+            <Button android:id="@+id/btnLimpiarBuscar" android:layout_width="wrap_content" android:layout_height="48dp"
+                android:text="Limpiar" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="14sp" android:background="@color/surface"
+                android:layout_marginLeft="6dp" android:paddingLeft="14dp" android:paddingRight="14dp"/>
+        </LinearLayout>
+
         <LinearLayout android:id="@+id/tabsRow" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:paddingBottom="8dp">
             <Button android:id="@+id/tabCarpetas" android:layout_width="0dp" android:layout_height="46dp"
@@ -249,7 +263,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes · v48" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v60" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
@@ -321,6 +335,10 @@
                     <CheckBox android:id="@+id/chkPausaUsb" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                 </LinearLayout>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Auto-detectar música (USB nuevo)" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
+                    <CheckBox android:id="@+id/chkAutoDetectar" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Seguir sonando con pantalla apagada" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
                     <CheckBox android:id="@+id/chkPantalla" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                 </LinearLayout>
@@ -337,6 +355,13 @@
                     android:text="" android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="10dp"/>
                 <TextView android:id="@+id/txtNet" android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:text="" android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="4dp"/>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
+
+                <Button android:id="@+id/btnWifi" android:layout_width="match_parent" android:layout_height="52dp"
+                    android:text="Recibir canciones por WiFi" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="Abre una página para enviar música desde el celular a la carpeta Descarga." android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="6dp"/>
             </LinearLayout>
         </ScrollView>
     </LinearLayout>
