@@ -239,8 +239,21 @@ public class MainActivity extends Activity {
     private View paneAjustes, paneExplorar;
     private boolean optAuto = false, optEmbed = true, optAutoDetectar = true;
     private String carpetaVinculada = null;
-    private final java.util.HashMap<String, byte[]> artCache = new java.util.HashMap<String, byte[]>();
-    private final java.util.HashMap<String, android.graphics.Bitmap> portadas = new java.util.HashMap<String, android.graphics.Bitmap>();
+    // Cachés con LÍMITE: guardan solo las últimas y botan las viejas (evita que el radio se quede sin memoria)
+    private final java.util.LinkedHashMap<String, byte[]> artCache =
+        new java.util.LinkedHashMap<String, byte[]>(16, 0.75f, false) {
+            protected boolean removeEldestEntry(java.util.Map.Entry<String, byte[]> e) { return size() > 40; }
+        };
+    private final java.util.LinkedHashMap<String, android.graphics.Bitmap> portadas =
+        new java.util.LinkedHashMap<String, android.graphics.Bitmap>(16, 0.75f, false) {
+            protected boolean removeEldestEntry(java.util.Map.Entry<String, android.graphics.Bitmap> e) { return size() > 80; }
+        };
+    // Carátulas candidatas por canción (para poder cambiar a otra distinta con cada búsqueda)
+    private final java.util.LinkedHashMap<String, java.util.ArrayList<String>> candidatosArt =
+        new java.util.LinkedHashMap<String, java.util.ArrayList<String>>(16, 0.75f, false) {
+            protected boolean removeEldestEntry(java.util.Map.Entry<String, java.util.ArrayList<String>> e) { return size() > 30; }
+        };
+    private final java.util.HashMap<String, Integer> indiceArt = new java.util.HashMap<String, Integer>();
     private ListView listExplorar;
     private android.widget.ArrayAdapter<String> expAdapter;
     private final ArrayList<String> expItems = new ArrayList<String>();
@@ -265,7 +278,7 @@ public class MainActivity extends Activity {
     private VisualizerView vizBg = null;
     private ParticlesView particles = null;
     private boolean efectosOn = true;
-    private int efectoModo = 3;   // 0 anillos, 1 partículas, 2 brillo, 3 todos, 4 ninguno
+    private int efectoModo = 4;   // 0 anillos, 1 partículas, 2 brillo, 3 todos, 4 ninguno (POR DEFECTO: apagado)
     private Visualizer visualizer = null;
 
     private final Handler handler = new Handler();
@@ -332,7 +345,7 @@ public class MainActivity extends Activity {
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque2", false);
         efectosOn = prefs.getBoolean("efectos", true);
-        efectoModo = prefs.getInt("efectoModo", 3);
+        efectoModo = prefs.getInt("efectoModo2", 4);
         aplicarTema();
 
         findViewById(R.id.btnAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
@@ -343,6 +356,17 @@ public class MainActivity extends Activity {
         chkAuto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optAuto=c; prefs.edit().putBoolean("optAuto",c).apply(); }});
         chkEmbed.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optEmbed=c; prefs.edit().putBoolean("optEmbed",c).apply(); }});
         findViewById(R.id.btnVincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirExplorador(); }});
+        findViewById(R.id.btnDetectarUsb).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            TextView t = (TextView) findViewById(R.id.txtDetectUsb);
+            t.setText("Buscando música del USB…");
+            handler.postDelayed(new Runnable(){ public void run(){
+                escanearMusica();
+                handler.postDelayed(new Runnable(){ public void run(){
+                    int n = totalCanciones();
+                    ((TextView) findViewById(R.id.txtDetectUsb)).setText(n > 0 ? ("Se encontraron " + n + " canciones") : "No se encontró música. Revisa que el USB esté conectado.");
+                }}, 1200);
+            }}, 200);
+        }});
         findViewById(R.id.btnDesvincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ carpetaVinculada=null; prefs.edit().remove("carpetaVinc").apply(); pintarAjustes(); escanearMusica(); }});
         findViewById(R.id.btnDescargarArt).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ descargarFaltantes(); }});
         findViewById(R.id.btnWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ alternarServidorWifi(); }});
@@ -407,7 +431,7 @@ public class MainActivity extends Activity {
         particles = (ParticlesView) findViewById(R.id.particulas);
         if (particles != null) particles.setColor(accent);
         findViewById(R.id.btnVis).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            efectoModo = (efectoModo + 1) % 5; prefs.edit().putInt("efectoModo", efectoModo).apply();
+            efectoModo = (efectoModo + 1) % 5; prefs.edit().putInt("efectoModo2", efectoModo).apply();
             aplicarEfectos();
             String[] nom = { "Solo anillos", "Solo partículas", "Solo brillo", "Todos", "Sin efectos" };
             Toast.makeText(MainActivity.this, nom[efectoModo], Toast.LENGTH_SHORT).show();
@@ -516,6 +540,28 @@ public class MainActivity extends Activity {
 
         cargarEqGuardado();
         escanearMusica();
+        // Reintentos por si la memoria USB monta un segundo después de abrir la app (sobre todo la 1ª vez)
+        handler.postDelayed(new Runnable(){ public void run(){ if (optAutoDetectar && totalCanciones() == 0) escanearMusica(); } }, 2500);
+        handler.postDelayed(new Runnable(){ public void run(){ if (optAutoDetectar && totalCanciones() == 0) escanearMusica(); } }, 6000);
+
+        // PRIMER ARRANQUE tras instalar: dejar todo listo (efectos apagados, auto-detección, detectar USB)
+        if (prefs.getBoolean("primeraVez", true)) {
+            prefs.edit().putBoolean("primeraVez", false)
+                .putInt("efectoModo2", 4)        // efectos de Vista: apagados
+                .putBoolean("autoDetectar", true) // detectar USB solo
+                .apply();
+            efectoModo = 4; optAutoDetectar = true;
+            Toast.makeText(this, "Bienvenido. Detectando música del USB…", Toast.LENGTH_LONG).show();
+            handler.postDelayed(new Runnable(){ public void run(){ escanearMusica(); } }, 1200);
+            handler.postDelayed(new Runnable(){ public void run(){ escanearMusica(); } }, 3500);
+            handler.postDelayed(new Runnable(){ public void run(){ escanearMusica(); } }, 8000);
+        }
+    }
+
+    private int totalCanciones() {
+        int n = 0;
+        try { for (Carpeta c : carpetas) { if (!c.esLista && c.songs != null) n += c.songs.size(); } } catch (Exception e) {}
+        return n;
     }
 
     private static final int MAX_DEPTH = 9;
@@ -1682,30 +1728,6 @@ public class MainActivity extends Activity {
     }
 
     // Cambiar carátula manual (tocando la carátula): buscar y elegir
-    // Busca y aplica la carátula directo, SIN abrir teclado (funciona aunque vayas manejando)
-    private void buscarCaratulaDirecto() {
-        final Song s = cancionActual();
-        if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
-        if (!hayInternet()) { Toast.makeText(this, "Sin internet", Toast.LENGTH_SHORT).show(); return; }
-        Toast.makeText(this, "Buscando carátula…", Toast.LENGTH_SHORT).show();
-        new Thread(new Runnable() {
-            public void run() {
-                final byte[] img = descargarArt(s);
-                if (img != null) { artCache.put(s.path, img); if (optEmbed) embedArt(s, img); }
-                runOnUiThread(new Runnable() {
-                    public void run() {
-                        if (img != null) {
-                            refrescarSiActual(s);
-                            try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
-                            Toast.makeText(MainActivity.this, "Carátula lista", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(MainActivity.this, "No se encontró carátula para \"" + nombreDe(s) + "\"", Toast.LENGTH_LONG).show();
-                        }
-                    }
-                });
-            }
-        }).start();
-    }
     // Menú al dejar presionada una canción en una carpeta
     private void opcionesCancion(final int p) {
         if (p < 0 || p >= cancionesCarpeta.size()) return;
@@ -1817,12 +1839,29 @@ public class MainActivity extends Activity {
         if (s == null) return "";
         s = s.toLowerCase(Locale.US);
         try { s = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", ""); } catch (Throwable t) {}
-        s = s.replaceAll("[_\\-.,;:()\\[\\]]", " ").replaceAll("\\s+", " ").trim();
+        // TODO lo que no sea letra/número/ñ -> espacio (maneja . - _ | / etc.)
+        s = s.replaceAll("[^a-z0-9ñ]+", " ").replaceAll("\\s+", " ").trim();
         return s;
+    }
+    private static final java.util.HashSet<String> BASURA = new java.util.HashSet<String>(java.util.Arrays.asList(
+        "www","http","https","com","net","org","web","mp3","mp4","wav","flac","m4a",
+        "descargar","download","gratis","online","free","oficial","official","video","audio",
+        "hd","hq","4k","lyrics","lyric","letra","letras","full","completo","remix","xd"));
+    // Limpia texto para búsqueda: quita acentos, símbolos y palabras basura (web, com, descargar, etc.)
+    private String limpiarTexto(String s) {
+        String[] w = norm(s).split(" ");
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < w.length; i++) {
+            String x = w[i];
+            if (x.length() == 0 || BASURA.contains(x)) continue;
+            if (x.matches("\\d{1,3}")) continue;  // números de pista sueltos
+            b.append(x).append(' ');
+        }
+        return b.toString().trim();
     }
     // Busca canciones por nombre/artista/álbum/archivo en TODAS las carpetas (por palabras, sin acentos)
     private void filtrarBusqueda(String qraw) {
-        String q = norm(qraw);
+        String q = limpiarTexto(qraw);
         if (q.length() == 0) {
             enBusqueda = false;
             if (modo == 1 && carpetaAbierta == carpetaBusqueda) { modo = 0; carpetaAbierta = null; }
@@ -1832,12 +1871,15 @@ public class MainActivity extends Activity {
         }
         enBusqueda = true;
         String[] palabras = q.split(" ");
+        String qJunto = q.replace(" ", "");
         ArrayList<Song> res = new ArrayList<Song>();
         for (Carpeta c : carpetas) {
             for (Song s : c.songs) {
-                String texto = norm((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+                String texto = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
                 boolean todas = true;
                 for (int k = 0; k < palabras.length; k++) { if (palabras[k].length() > 0 && texto.indexOf(palabras[k]) < 0) { todas = false; break; } }
+                // También aceptar si el nombre pegado (sin espacios) contiene la búsqueda pegada
+                if (!todas && qJunto.length() >= 3 && texto.replace(" ", "").indexOf(qJunto) >= 0) todas = true;
                 if (todas) res.add(s);
             }
         }
@@ -1851,6 +1893,98 @@ public class MainActivity extends Activity {
         try { txtCount.setText("Resultados: " + res.size()); } catch (Exception e) {}
     }
 
+    // Trae VARIAS URLs de carátula (iTunes + Deezer) para poder elegir otra distinta
+    private void urlsDeItunes(String term, java.util.ArrayList<String> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("http://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + q);
+            if (json == null) json = httpGet("https://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + q);
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
+            if (arr == null) return;
+            for (int i = 0; i < arr.length(); i++) {
+                String art = arr.getJSONObject(i).optString("artworkUrl100", "");
+                if (art.length() > 0) { art = art.replace("100x100", pxCal()); if (!out.contains(art)) out.add(art); }
+            }
+        } catch (Exception e) {}
+    }
+    private void urlsDeDeezer(String term, java.util.ArrayList<String> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("http://api.deezer.com/search?limit=8&q=" + q);
+            if (json == null) json = httpGet("https://api.deezer.com/search?limit=8&q=" + q);
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("data");
+            if (arr == null) return;
+            String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject alb = arr.getJSONObject(i).optJSONObject("album");
+                if (alb == null) continue;
+                String art = alb.optString(key, alb.optString("cover_big", alb.optString("cover", "")));
+                if (art.length() > 0 && !out.contains(art)) out.add(art);
+            }
+        } catch (Exception e) {}
+    }
+    private java.util.ArrayList<String> candidatosUrls(Song s) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<String>();
+        java.util.ArrayList<String> terminos = terminosBusqueda(s);
+        for (int i = 0; i < terminos.size() && out.size() < 15; i++) {
+            urlsDeItunes(terminos.get(i), out);
+            urlsDeDeezer(terminos.get(i), out);
+        }
+        return out;
+    }
+    private byte[] bajarUrl(String art) {
+        if (art == null || art.length() == 0) return null;
+        String artHttp = art.startsWith("https://") ? "http://" + art.substring(8) : art;
+        byte[] img = httpGetBytes(artHttp);
+        if (img == null && !artHttp.equals(art)) img = httpGetBytes(art);
+        return img;
+    }
+
+    // 4 toques: busca la carátula. Si repites, va CAMBIANDO a otra distinta ("Carátula 2 de 6"...)
+    private void buscarCaratulaDirecto() {
+        final Song s = cancionActual();
+        if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
+        if (!hayInternet()) { Toast.makeText(this, "Sin internet", Toast.LENGTH_SHORT).show(); return; }
+        Toast.makeText(this, "Buscando carátula…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            public void run() {
+                java.util.ArrayList<String> urls = candidatosArt.get(s.path);
+                if (urls == null || urls.isEmpty()) {
+                    urls = candidatosUrls(s);
+                    if (urls != null && !urls.isEmpty()) { candidatosArt.put(s.path, urls); indiceArt.put(s.path, -1); }
+                }
+                final java.util.ArrayList<String> lista = urls;
+                if (lista == null || lista.isEmpty()) {
+                    runOnUiThread(new Runnable(){ public void run(){ Toast.makeText(MainActivity.this, "No se encontró carátula para \"" + nombreDe(s) + "\"", Toast.LENGTH_LONG).show(); }});
+                    return;
+                }
+                int idx = indiceArt.containsKey(s.path) ? indiceArt.get(s.path) : -1;
+                byte[] img = null; int intentos = 0;
+                while (intentos < lista.size()) {
+                    idx = (idx + 1) % lista.size();
+                    img = bajarUrl(lista.get(idx));
+                    intentos++;
+                    if (img != null) break;
+                }
+                indiceArt.put(s.path, idx);
+                final byte[] fimg = img; final int fidx = idx; final int total = lista.size();
+                if (fimg != null) { artCache.put(s.path, fimg); if (optEmbed) embedArt(s, fimg); }
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (fimg != null) {
+                            refrescarSiActual(s);
+                            try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                            Toast.makeText(MainActivity.this, "Carátula " + (fidx + 1) + " de " + total + " (4 toques = otra)", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(MainActivity.this, "No se pudo descargar la carátula", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
     private void cambiarCaratula() {
         final Song s = cancionActual();
         if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
@@ -2296,5 +2430,19 @@ public class MainActivity extends Activity {
         try { if (eq != null) eq.release(); } catch (Exception e) {}
         try { if (mp != null) mp.release(); } catch (Exception e) {}
         eq = null; mp = null;
+    }
+
+    // El sistema avisa que anda bajo de memoria: soltamos las carátulas guardadas para no cerrarnos
+    public void onTrimMemory(int level) {
+        try { super.onTrimMemory(level); } catch (Exception e) {}
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            try { artCache.clear(); } catch (Exception e) {}
+            try { portadas.clear(); } catch (Exception e) {}
+        }
+    }
+    public void onLowMemory() {
+        try { super.onLowMemory(); } catch (Exception e) {}
+        try { artCache.clear(); } catch (Exception e) {}
+        try { portadas.clear(); } catch (Exception e) {}
     }
 }
