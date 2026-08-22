@@ -263,6 +263,7 @@ public class MainActivity extends Activity {
     private org.json.JSONObject listas = new org.json.JSONObject();  // nombre -> [rutas]
     private int tab = 0;   // 0 = carpetas, 1 = mis listas
     private boolean enBusqueda = false;
+    private String rutaActualCache = null;   // caché de la canción que suena (para pintar rápido la lista)
     private Carpeta carpetaBusqueda;
     private final ArrayList<Song> videos = new ArrayList<Song>();
     private final java.util.HashSet<String> vistosVideo = new java.util.HashSet<String>();
@@ -562,44 +563,53 @@ public class MainActivity extends Activity {
 
     private static final int MAX_DEPTH = 9;
 
+    private volatile boolean escaneando = false;
+    private volatile boolean rescanPendiente = false;
     private void escanearMusica() {
+        if (escaneando) { rescanPendiente = true; return; }  // ya hay uno; no duplicar
+        escaneando = true;
         txtCount.setText("Buscando música…");
         new Thread(new Runnable() {
             public void run() {
-                final ArrayList<Song> found = new ArrayList<Song>();
-                Set<String> vistos = new HashSet<String>();
-                videos.clear(); vistosVideo.clear();
-                for (File root : raices()) {
-                    buscarAudio(root, found, vistos, 0);
-                }
-                runOnUiThread(new Runnable() {
-                    public void run() {
-                        agruparEnCarpetas(found);
-                        modo = 0; carpetaAbierta = null;
-                        adapter.notifyDataSetChanged();
-                        actualizarHeaderLista();
-                        calcularPortadasCarpetas();
-                        if (optAuto && hayInternet() && !carpetas.isEmpty()) descargarFaltantes();
-                        if (optResume) {
-                            String lp = prefs.getString("lastPath", null);
-                            if (lp != null) {
-                                Song s = songPorRuta(lp);
-                                if (s != null) {
-                                    for (Carpeta c : carpetas) {
-                                        int ix = c.songs.indexOf(s);
-                                        if (ix >= 0) {
-                                            songs.clear(); songs.addAll(c.songs); construirOrden();
-                                            posEnOrden = order.indexOf(ix); if (posEnOrden < 0) posEnOrden = 0;
-                                            noAutoStart = !optAutoplay;
-                                            cargarYReproducir();
-                                            break;
+                try {
+                    final ArrayList<Song> found = new ArrayList<Song>();
+                    Set<String> vistos = new HashSet<String>();
+                    videos.clear(); vistosVideo.clear();
+                    for (File root : raices()) {
+                        buscarAudio(root, found, vistos, 0);
+                    }
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            agruparEnCarpetas(found);
+                            modo = 0; carpetaAbierta = null;
+                            adapter.notifyDataSetChanged();
+                            actualizarHeaderLista();
+                            calcularPortadasCarpetas();
+                            if (optAuto && hayInternet() && !carpetas.isEmpty()) descargarFaltantes();
+                            if (optResume) {
+                                String lp = prefs.getString("lastPath", null);
+                                if (lp != null) {
+                                    Song s = songPorRuta(lp);
+                                    if (s != null) {
+                                        for (Carpeta c : carpetas) {
+                                            int ix = c.songs.indexOf(s);
+                                            if (ix >= 0) {
+                                                songs.clear(); songs.addAll(c.songs); construirOrden();
+                                                posEnOrden = order.indexOf(ix); if (posEnOrden < 0) posEnOrden = 0;
+                                                noAutoStart = !optAutoplay;
+                                                cargarYReproducir();
+                                                break;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                });
+                    });
+                } finally {
+                    escaneando = false;
+                    if (rescanPendiente) { rescanPendiente = false; handler.postDelayed(new Runnable(){ public void run(){ escanearMusica(); } }, 500); }
+                }
             }
         }).start();
     }
@@ -607,7 +617,14 @@ public class MainActivity extends Activity {
     // Carpeta "Descarga": donde llegan las canciones enviadas por WiFi
     private File carpetaDescarga() {
         File d = null;
-        try { d = new File(Environment.getExternalStorageDirectory(), "Descarga"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {}
+        // 1) PRIMERO dentro del USB (la memoria enfocada/vinculada), para que se vea en la PC y aparezca en el radio
+        try {
+            String usb = carpetaVinculada;
+            if (usb == null) usb = detectarRutaUsb();
+            if (usb != null) { File f = new File(usb, "Descarga"); if (!f.exists()) f.mkdirs(); if (f.exists() && f.canWrite()) d = f; }
+        } catch (Exception e) {}
+        // 2) Si no hay USB escribible, memoria interna del radio
+        if (d == null) { try { d = new File(Environment.getExternalStorageDirectory(), "Descarga"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
         if (d == null || !d.exists()) { try { d = new File(getExternalFilesDir(null), "Descarga"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
         return d;
     }
@@ -775,79 +792,88 @@ public class MainActivity extends Activity {
         return "";
     }
 
-    // Lee título/artista/carátula reales del archivo que suena
-    private void cargarMetadatosActual(Song s) {
+    // Lee título/artista/carátula reales del archivo que suena (trabajo pesado en 2º plano = no traba)
+    private void cargarMetadatosActual(final Song s) {
+        if (s == null) return;
+        rutaActualCache = s.path;
+        final int animDirCap = animDir; animDir = 0;
+        // RÁPIDO (hilo principal): mostrar lo que ya sabemos y animar
         txtTitle.setText(s.title);
         txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
-        Bitmap bmp = null;
-        try {
-            MediaMetadataRetriever r = new MediaMetadataRetriever();
-            r.setDataSource(s.path);
-            String t = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
-            String a = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
-            String al = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
-            byte[] pic = r.getEmbeddedPicture();
-            try { r.release(); } catch (Exception e) {}
-            if (t != null && t.trim().length() > 0) { s.title = t; txtTitle.setText(t); }
-            if (a != null && a.trim().length() > 0) { s.artist = a; txtArtist.setText(a); }
-            else txtArtist.setText("Desconocido");
-            if (al != null && al.trim().length() > 0) s.album = al;
-            if (pic != null) bmp = decodeEscalado(pic, 600);
-        } catch (Exception e) {}
-        if (bmp == null && artCache.containsKey(s.path)) {
-            try { byte[] c = artCache.get(s.path); bmp = decodeEscalado(c, 600); } catch (Exception e) {}
-        }
-        if (bmp != null) {
-            imgArt.setImageBitmap(bmp);
-            if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
-            try {
-                // Fondo estilo Poweramp: desenfoque suave + colores vivos sacados de la carátula
-                Bitmap fondo = desenfocar(bmp, 60, 7);
-                if (fondo == null) fondo = Bitmap.createScaledBitmap(bmp, 20, 20, true);
-                imgArtBg.setImageBitmap(fondo);
-                imgArtBg.setBackgroundColor(0xFF06060A);
-                // Subir saturación (colores más llamativos) y oscurecer un poco (para que resalte la portada)
-                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
-                cm.setSaturation(1.5f);
-                android.graphics.ColorMatrix osc = new android.graphics.ColorMatrix();
-                osc.setScale(0.72f, 0.72f, 0.72f, 1f);
-                cm.postConcat(osc);
-                imgArtBg.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
-            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
-            artScrim.setVisibility(View.VISIBLE);
-        } else {
-            // Sin carátula: fondo NEGRO + nombre de la canción en grande
-            imgArt.setImageDrawable(new ColorDrawable(0x00000000));
-            imgArtBg.setImageDrawable(null);
-            imgArtBg.setColorFilter(null);
-            imgArtBg.setBackgroundColor(0xFF000000);
-            artScrim.setVisibility(View.GONE);
-            if (txtNombreGrande != null) {
-                String nom = nombreDe(s);
-                txtNombreGrande.setText(nom);
-                txtNombreGrande.setVisibility(View.VISIBLE);
+        animarEntradaCaratula(animDirCap);
+        final String pathCap = s.path;
+        // PESADO (2º plano): leer metadatos del archivo + decodificar carátula + desenfoque
+        new Thread(new Runnable() {
+            public void run() {
+                final String[] m = new String[3];
+                Bitmap bmp = null;
+                try {
+                    MediaMetadataRetriever r = new MediaMetadataRetriever();
+                    r.setDataSource(pathCap);
+                    m[0] = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+                    m[1] = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+                    m[2] = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                    byte[] pic = r.getEmbeddedPicture();
+                    try { r.release(); } catch (Exception e) {}
+                    if (pic != null) bmp = decodeEscalado(pic, 600);
+                } catch (Exception e) {}
+                if (bmp == null) {
+                    byte[] c = null;
+                    synchronized (artCache) { if (artCache.containsKey(pathCap)) c = artCache.get(pathCap); }
+                    if (c != null) { try { bmp = decodeEscalado(c, 600); } catch (Exception e) {} }
+                }
+                final Bitmap portada = bmp;
+                final Bitmap fondo = (bmp != null) ? desenfocar(bmp, 60, 7) : null;
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        // Si el usuario ya cambió de canción, no aplicar (evita parpadeo y pintar la carátula equivocada)
+                        if (pathCap == null || !pathCap.equals(rutaActualCache)) return;
+                        if (m[0] != null && m[0].trim().length() > 0) { s.title = m[0]; txtTitle.setText(m[0]); }
+                        if (m[1] != null && m[1].trim().length() > 0) { s.artist = m[1]; txtArtist.setText(m[1]); }
+                        if (m[2] != null && m[2].trim().length() > 0) s.album = m[2];
+                        if (portada != null) {
+                            imgArt.setImageBitmap(portada);
+                            if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
+                            try {
+                                Bitmap fbg = (fondo != null) ? fondo : Bitmap.createScaledBitmap(portada, 20, 20, true);
+                                imgArtBg.setImageBitmap(fbg);
+                                imgArtBg.setBackgroundColor(0xFF06060A);
+                                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix(); cm.setSaturation(1.5f);
+                                android.graphics.ColorMatrix osc = new android.graphics.ColorMatrix(); osc.setScale(0.72f, 0.72f, 0.72f, 1f);
+                                cm.postConcat(osc);
+                                imgArtBg.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+                            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
+                            artScrim.setVisibility(View.VISIBLE);
+                        } else {
+                            imgArt.setImageDrawable(new ColorDrawable(0x00000000));
+                            imgArtBg.setImageDrawable(null); imgArtBg.setColorFilter(null); imgArtBg.setBackgroundColor(0xFF000000);
+                            artScrim.setVisibility(View.GONE);
+                            if (txtNombreGrande != null) { txtNombreGrande.setText(nombreDe(s)); txtNombreGrande.setVisibility(View.VISIBLE); }
+                        }
+                        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                    }
+                });
             }
-        }
-        if (animDir != 0) {
-            try {
-                int w = imgArt.getWidth(); if (w <= 0) w = 400;
-                android.view.animation.AnimationSet set = new android.view.animation.AnimationSet(true);
-                // deslizamiento
-                android.view.animation.TranslateAnimation ta = new android.view.animation.TranslateAnimation(animDir * w * 0.6f, 0, 0, 0);
-                // giro tipo 3D (escala horizontal de 0 a 1 = efecto de "abrir" girando)
-                android.view.animation.ScaleAnimation sa = new android.view.animation.ScaleAnimation(
-                    0.3f, 1f, 0.85f, 1f,
-                    android.view.animation.Animation.RELATIVE_TO_SELF, animDir == 1 ? 0f : 1f,
-                    android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
-                android.view.animation.AlphaAnimation aa = new android.view.animation.AlphaAnimation(0.2f, 1f);
-                set.addAnimation(ta); set.addAnimation(sa); set.addAnimation(aa);
-                set.setDuration(340);
-                set.setInterpolator(new android.view.animation.DecelerateInterpolator());
-                imgArt.startAnimation(set);
-                if (imgArtBg != null) { android.view.animation.AlphaAnimation ab = new android.view.animation.AlphaAnimation(0.4f, 1f); ab.setDuration(340); imgArtBg.startAnimation(ab); }
-            } catch (Exception e) {}
-            animDir = 0;
-        }
+        }).start();
+    }
+    // Animación de entrada de la carátula (deslizar + giro 3D)
+    private void animarEntradaCaratula(int animDirLocal) {
+        if (animDirLocal == 0) return;
+        try {
+            int w = imgArt.getWidth(); if (w <= 0) w = 400;
+            android.view.animation.AnimationSet set = new android.view.animation.AnimationSet(true);
+            android.view.animation.TranslateAnimation ta = new android.view.animation.TranslateAnimation(animDirLocal * w * 0.6f, 0, 0, 0);
+            android.view.animation.ScaleAnimation sa = new android.view.animation.ScaleAnimation(
+                0.3f, 1f, 0.85f, 1f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, animDirLocal == 1 ? 0f : 1f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+            android.view.animation.AlphaAnimation aa = new android.view.animation.AlphaAnimation(0.2f, 1f);
+            set.addAnimation(ta); set.addAnimation(sa); set.addAnimation(aa);
+            set.setDuration(340);
+            set.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            imgArt.startAnimation(set);
+            if (imgArtBg != null) { android.view.animation.AlphaAnimation ab = new android.view.animation.AlphaAnimation(0.4f, 1f); ab.setDuration(340); imgArtBg.startAnimation(ab); }
+        } catch (Exception e) {}
     }
 
     private void construirOrden() {
@@ -2516,9 +2542,7 @@ public class MainActivity extends Activity {
                     Song s = cancionesCarpeta.get(i);
                     t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
                     d.setText(s.dur > 0 ? fmt(s.dur) : "");
-                    String actualPath = (posEnOrden >= 0 && posEnOrden < order.size() && order.get(posEnOrden) < songs.size())
-                        ? songs.get(order.get(posEnOrden)).path : null;
-                    t.setTextColor(actualPath != null && actualPath.equals(s.path) ? accent : 0xFFF4F4F8);
+                    t.setTextColor(rutaActualCache != null && rutaActualCache.equals(s.path) ? accent : 0xFFF4F4F8);
                 }
             }
             return v;
