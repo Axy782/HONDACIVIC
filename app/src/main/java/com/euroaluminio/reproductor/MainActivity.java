@@ -141,11 +141,18 @@ public class MainActivity extends Activity {
             return;
         }
         try {
-            final File dest = carpetaDescarga();
-            servidor = new ServidorWifi(dest, new ServidorWifi.Callback() {
+            servidor = new ServidorWifi(new ServidorWifi.Callback() {
+                public java.io.File carpetaDestino(String nombre) {
+                    String n = (nombre == null) ? "" : nombre.toLowerCase(java.util.Locale.US);
+                    if (n.endsWith(".mp4") || n.endsWith(".3gp") || n.endsWith(".m4v") || n.endsWith(".mkv")
+                        || n.endsWith(".webm") || n.endsWith(".avi") || n.endsWith(".mov")) {
+                        return carpetaVideos();   // los videos van a la carpeta Videos
+                    }
+                    return carpetaDescarga();     // la música va a Descarga
+                }
                 public void archivoRecibido(String nombre) {
                     runOnUiThread(new Runnable() { public void run() {
-                        Toast.makeText(MainActivity.this, "Recibida: " + nombre, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Recibido: " + nombre, Toast.LENGTH_SHORT).show();
                         escanearMusica();
                     }});
                 }
@@ -615,6 +622,19 @@ public class MainActivity extends Activity {
     }
 
     // Carpeta "Descarga": donde llegan las canciones enviadas por WiFi
+    // Carpeta "Videos" dentro del USB (para separar los videos de la música)
+    private File carpetaVideos() {
+        File d = null;
+        try {
+            String usb = carpetaVinculada;
+            if (usb == null) usb = detectarRutaUsb();
+            if (usb != null) { File f = new File(usb, "Videos"); if (!f.exists()) f.mkdirs(); if (f.exists() && f.canWrite()) d = f; }
+        } catch (Exception e) {}
+        if (d == null) { try { d = new File(Environment.getExternalStorageDirectory(), "Videos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
+        if (d == null || !d.exists()) { try { d = new File(getExternalFilesDir(null), "Videos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
+        return d;
+    }
+
     private File carpetaDescarga() {
         File d = null;
         // 1) PRIMERO dentro del USB (la memoria enfocada/vinculada), para que se vea en la PC y aparezca en el radio
@@ -633,6 +653,7 @@ public class MainActivity extends Activity {
     private ArrayList<File> raices() {
         ArrayList<File> r = new ArrayList<File>();
         try { File desc = carpetaDescarga(); if (desc != null && desc.exists() && desc.canRead()) r.add(desc); } catch (Exception e) {}
+        try { File vid = carpetaVideos(); if (vid != null && vid.exists() && vid.canRead()) r.add(vid); } catch (Exception e) {}
         if (carpetaVinculada != null) {
             File f = new File(carpetaVinculada);
             if (f.exists() && f.canRead()) { r.add(f); return r; }
@@ -815,12 +836,12 @@ public class MainActivity extends Activity {
                     m[2] = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
                     byte[] pic = r.getEmbeddedPicture();
                     try { r.release(); } catch (Exception e) {}
-                    if (pic != null) bmp = decodeEscalado(pic, 600);
+                    if (pic != null) bmp = decodeEscalado(pic, 512);
                 } catch (Exception e) {}
                 if (bmp == null) {
                     byte[] c = null;
                     synchronized (artCache) { if (artCache.containsKey(pathCap)) c = artCache.get(pathCap); }
-                    if (c != null) { try { bmp = decodeEscalado(c, 600); } catch (Exception e) {} }
+                    if (c != null) { try { bmp = decodeEscalado(c, 512); } catch (Exception e) {} }
                 }
                 final Bitmap portada = bmp;
                 final Bitmap fondo = (bmp != null) ? desenfocar(bmp, 60, 7) : null;
@@ -2175,7 +2196,7 @@ public class MainActivity extends Activity {
         box.addView(etTit);
         box.addView(etArt);
         new AlertDialog.Builder(this).setTitle("Carátula y nombre").setView(box)
-            .setPositiveButton("Buscar carátula", new android.content.DialogInterface.OnClickListener() {
+            .setPositiveButton("Ver carátulas disponibles", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface d, int w) {
                     buscarCaratulas(s, etTit.getText().toString().trim(), etArt.getText().toString().trim());
                 }
@@ -2447,8 +2468,15 @@ public class MainActivity extends Activity {
             while ((o.outWidth / s) > max || (o.outHeight / s) > max) s *= 2;
             BitmapFactory.Options o2 = new BitmapFactory.Options();
             o2.inSampleSize = s;
+            o2.inPreferredConfig = Bitmap.Config.RGB_565;  // la mitad de memoria (las portadas no necesitan transparencia)
             return BitmapFactory.decodeByteArray(data, 0, data.length, o2);
-        } catch (Throwable e) { return null; }
+        } catch (Throwable e) {
+            try {  // reintento si falla por memoria
+                BitmapFactory.Options o3 = new BitmapFactory.Options();
+                o3.inSampleSize = 4; o3.inPreferredConfig = Bitmap.Config.RGB_565;
+                return BitmapFactory.decodeByteArray(data, 0, data.length, o3);
+            } catch (Throwable e2) { return null; }
+        }
     }
     // Desenfoque suave estilo Poweramp: reduce la carátula a un tamaño pequeño y le aplica
     // un box blur de 2 pasadas (horizontal + vertical). Es liviano (imagen chica) y se ve cremoso.
@@ -2555,12 +2583,13 @@ public class MainActivity extends Activity {
         for (int i = 0; i < lim; i++) {
             Song s = lista.get(i);
             byte[] d = null;
-            if (artCache.containsKey(s.path)) d = artCache.get(s.path);
-            else {
+            synchronized (artCache) { if (artCache.containsKey(s.path)) d = artCache.get(s.path); }
+            if (d == null) {
                 try { MediaMetadataRetriever r = new MediaMetadataRetriever(); r.setDataSource(s.path); d = r.getEmbeddedPicture(); try { r.release(); } catch (Exception e) {} } catch (Exception e) {}
             }
             if (d != null) {
-                try { BitmapFactory.Options o = new BitmapFactory.Options(); o.inSampleSize = 2; return BitmapFactory.decodeByteArray(d, 0, d.length, o); } catch (Exception e) {}
+                android.graphics.Bitmap b = decodeEscalado(d, 160);  // miniatura chica y liviana (RGB_565)
+                if (b != null) return b;
             }
         }
         return null;
@@ -2623,9 +2652,10 @@ public class MainActivity extends Activity {
     // El sistema avisa que anda bajo de memoria: soltamos las carátulas guardadas para no cerrarnos
     public void onTrimMemory(int level) {
         try { super.onTrimMemory(level); } catch (Exception e) {}
-        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+        // Solo en emergencia REAL (app oculta y por cerrarse) soltamos las carátulas grandes.
+        // NO borramos las miniaturas de carpetas para que no desaparezcan al bajar una carátula.
+        if (level >= TRIM_MEMORY_COMPLETE) {
             try { artCache.clear(); } catch (Exception e) {}
-            synchronized (portadas) { try { portadas.clear(); } catch (Exception e) {} }
         }
     }
     public void onLowMemory() {

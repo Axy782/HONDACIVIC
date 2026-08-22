@@ -13,15 +13,14 @@ import java.net.Socket;
 // El celular abre http://IP:8080 , elige archivos y se suben a la carpeta "Descarga".
 public class ServidorWifi {
 
-    public interface Callback { void archivoRecibido(String nombre); }
+    public interface Callback { void archivoRecibido(String nombre); java.io.File carpetaDestino(String nombre); }
 
-    private final File dir;
     private final Callback cb;
     private ServerSocket server;
     private volatile boolean corriendo = false;
     public final int puerto = 8080;
 
-    public ServidorWifi(File dir, Callback cb) { this.dir = dir; this.cb = cb; }
+    public ServidorWifi(Callback cb) { this.cb = cb; }
 
     public void iniciar() throws Exception {
         server = new ServerSocket();
@@ -49,7 +48,7 @@ public class ServidorWifi {
 
     private void atender(Socket s) {
         try {
-            s.setSoTimeout(60000);
+            s.setSoTimeout(300000);   // 5 min: los videos grandes por WiFi tardan
             InputStream in = new BufferedInputStream(s.getInputStream());
             OutputStream out = s.getOutputStream();
 
@@ -76,20 +75,27 @@ public class ServidorWifi {
                 if (q >= 0) { nombre = urldecode(ruta.substring(q + 7)); }
                 nombre = limpiarNombreArchivo(nombre);
                 boolean ok = false;
+                String err = "";
                 try {
-                    if (!dir.exists()) dir.mkdirs();
+                    File dir = (cb != null) ? cb.carpetaDestino(nombre) : null;   // carpeta según tipo (Videos o Descarga), fresca
+                    if (dir != null && !dir.exists()) dir.mkdirs();
+                    if (dir == null) { responder(out, "500 Error", "text/plain; charset=utf-8", "No hay memoria USB detectada"); out.flush(); s.close(); return; }
                     File dest = new File(dir, nombre);
                     FileOutputStream fos = new FileOutputStream(dest);
                     byte[] buf = new byte[65536];
-                    long falta = contentLength; int n;
-                    while (falta > 0 && (n = in.read(buf, 0, (int) Math.min(buf.length, falta))) > 0) {
-                        fos.write(buf, 0, n); falta -= n;
-                    }
-                    fos.flush(); fos.close();
-                    ok = true;
-                    if (cb != null) cb.archivoRecibido(nombre);
-                } catch (Throwable t) { ok = false; }
-                responder(out, ok ? "200 OK" : "500 Error", "text/plain; charset=utf-8", ok ? "OK" : "ERROR");
+                    long falta = contentLength; int n; boolean completo = true;
+                    try {
+                        while (falta > 0 && (n = in.read(buf, 0, (int) Math.min(buf.length, falta))) > 0) {
+                            fos.write(buf, 0, n); falta -= n;
+                        }
+                        fos.flush();
+                    } catch (Throwable wt) { completo = false; err = "" + wt; }
+                    try { fos.close(); } catch (Exception e) {}
+                    if (completo && falta <= 0) { ok = true; if (cb != null) cb.archivoRecibido(nombre); }
+                    else { try { dest.delete(); } catch (Exception e) {}   // borrar archivo a medias
+                        if (err.length() == 0) err = "Se cortó la subida"; }
+                } catch (Throwable t) { ok = false; err = "" + t; }
+                responder(out, ok ? "200 OK" : "500 Error", "text/plain; charset=utf-8", ok ? "OK" : ("ERROR: " + err));
             } else {
                 responder(out, "200 OK", "text/html; charset=utf-8", paginaHtml());
             }
@@ -152,7 +158,7 @@ public class ServidorWifi {
             + ".ok{color:#4ecb7a}.err{color:#ff6b6b}.prog{color:#7fb0ff}"
             + "</style></head><body>"
             + "<h1>Enviar al radio</h1>"
-            + "<p>Elige canciones (MP3) o videos (MP4) de tu celular y se copiaran a la carpeta Descarga del radio.</p>"
+            + "<p>Elige canciones (MP3) o videos (MP4). La música va a la carpeta Descarga y los videos a la carpeta Videos, en la memoria USB.</p>"
             + "<input id='f' type='file' accept='audio/*,video/*,.mp3,.mp4,.3gp,.m4v,.mkv,.avi' multiple style='display:none'>"
             + "<button class='btn' onclick=\"document.getElementById('f').click()\">+ Elegir canciones o videos</button>"
             + "<div id='lista' class='card' style='display:none'></div>"
@@ -163,7 +169,7 @@ public class ServidorWifi {
             + "var file=fs[i];var row=document.createElement('div');row.className='fila prog';row.textContent='Enviando: '+file.name+' ...';lista.appendChild(row);"
             + "var xhr=new XMLHttpRequest();xhr.open('POST','/subir?nombre='+encodeURIComponent(file.name));"
             + "xhr.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);row.textContent='Enviando: '+file.name+' '+p+'%';}};"
-            + "xhr.onload=function(){if(xhr.status==200){row.className='fila ok';row.textContent='OK: '+file.name;}else{row.className='fila err';row.textContent='Error: '+file.name;}subir(fs,i+1);};"
+            + "xhr.onload=function(){if(xhr.status==200){row.className='fila ok';row.textContent='OK: '+file.name;}else{row.className='fila err';row.textContent=(xhr.responseText||'Error')+' : '+file.name;}subir(fs,i+1);};"
             + "xhr.onerror=function(){row.className='fila err';row.textContent='Error: '+file.name;subir(fs,i+1);};"
             + "xhr.send(file);}"
             + "</script></body></html>";
