@@ -114,7 +114,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="#77000000"
+            android:background="#55000000"
             android:paddingLeft="14dp"
             android:paddingRight="14dp"
             android:paddingTop="6dp"
@@ -236,6 +236,8 @@
                 android:layout_weight="1" android:text="Carpetas" android:textStyle="bold" android:textColor="@color/accent" android:background="@color/surface2"/>
             <Button android:id="@+id/tabListas" android:layout_width="0dp" android:layout_height="46dp"
                 android:layout_weight="1" android:layout_marginLeft="8dp" android:text="Mis Listas" android:textStyle="bold" android:textColor="@color/muted" android:background="@color/surface"/>
+            <Button android:id="@+id/tabVideos" android:layout_width="0dp" android:layout_height="46dp"
+                android:layout_weight="1" android:layout_marginLeft="8dp" android:text="Videos" android:textStyle="bold" android:textColor="@color/muted" android:background="@color/surface"/>
         </LinearLayout>
 
         <ListView
@@ -263,7 +265,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes · v65" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v71" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
@@ -364,9 +366,9 @@
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
 
                 <Button android:id="@+id/btnWifi" android:layout_width="match_parent" android:layout_height="52dp"
-                    android:text="Recibir canciones por WiFi" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
+                    android:text="Recibir música y videos por WiFi" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:text="Abre una página para enviar música desde el celular a la carpeta Descarga." android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="6dp"/>
+                    android:text="Abre una página para enviar música o videos desde el celular a la carpeta Descarga." android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="6dp"/>
             </LinearLayout>
         </ScrollView>
     </LinearLayout>
@@ -395,4 +397,26 @@
             android:layout_weight="1" android:cacheColorHint="#00000000" android:divider="#18FFFFFF" android:dividerHeight="1dp"/>
     </LinearLayout>
 
+    <!-- Reproductor de video (pantalla completa) -->
+    <FrameLayout
+        android:id="@+id/paneVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:visibility="gone">
+        <VideoView android:id="@+id/videoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"/>
+        <Button android:id="@+id/btnCerrarVideo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|right"
+            android:text="Cerrar"
+            android:textColor="#FFFFFF" android:textStyle="bold"
+            android:background="#88000000"
+            android:layout_margin="10dp"/>
+    </FrameLayout>
+
 </FrameLayout>
+

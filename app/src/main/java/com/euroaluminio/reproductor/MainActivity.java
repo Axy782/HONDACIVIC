@@ -156,7 +156,7 @@ public class MainActivity extends Activity {
                 .setTitle("Recibir por WiFi — ACTIVO")
                 .setMessage("1) Conecta tu CELULAR a la MISMA red WiFi que el radio.\n\n"
                     + "2) Abre esta dirección en el navegador del celular:\n\n        " + url + "\n\n"
-                    + "3) Elige las canciones y se copian a la carpeta Descarga.\n\n"
+                    + "3) Elige canciones o videos y se copian a la carpeta Descarga.\n\n"
                     + "(Deja esta app abierta mientras envías. Toca de nuevo el botón para apagar.)")
                 .setPositiveButton("Entendido", null).show();
         } catch (Exception e) {
@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
         };
     private final java.util.LinkedHashMap<String, android.graphics.Bitmap> portadas =
         new java.util.LinkedHashMap<String, android.graphics.Bitmap>(16, 0.75f, false) {
-            protected boolean removeEldestEntry(java.util.Map.Entry<String, android.graphics.Bitmap> e) { return size() > 80; }
+            protected boolean removeEldestEntry(java.util.Map.Entry<String, android.graphics.Bitmap> e) { return size() > 150; }
         };
     // Carátulas candidatas por canción (para poder cambiar a otra distinta con cada búsqueda)
     private final java.util.LinkedHashMap<String, java.util.ArrayList<String>> candidatosArt =
@@ -264,6 +264,8 @@ public class MainActivity extends Activity {
     private int tab = 0;   // 0 = carpetas, 1 = mis listas
     private boolean enBusqueda = false;
     private Carpeta carpetaBusqueda;
+    private final ArrayList<Song> videos = new ArrayList<Song>();
+    private final java.util.HashSet<String> vistosVideo = new java.util.HashSet<String>();
     private final ArrayList<String> nombresListas = new ArrayList<String>();
     // Opciones extra
     private String optCalidad = "alta", optTema = "ambar", optOrden = "nombre";
@@ -357,15 +359,7 @@ public class MainActivity extends Activity {
         chkEmbed.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optEmbed=c; prefs.edit().putBoolean("optEmbed",c).apply(); }});
         findViewById(R.id.btnVincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirExplorador(); }});
         findViewById(R.id.btnDetectarUsb).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            TextView t = (TextView) findViewById(R.id.txtDetectUsb);
-            t.setText("Buscando música del USB…");
-            handler.postDelayed(new Runnable(){ public void run(){
-                escanearMusica();
-                handler.postDelayed(new Runnable(){ public void run(){
-                    int n = totalCanciones();
-                    ((TextView) findViewById(R.id.txtDetectUsb)).setText(n > 0 ? ("Se encontraron " + n + " canciones") : "No se encontró música. Revisa que el USB esté conectado.");
-                }}, 1200);
-            }}, 200);
+            detectarYEnfocarUsb();
         }});
         findViewById(R.id.btnDesvincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ carpetaVinculada=null; prefs.edit().remove("carpetaVinc").apply(); pintarAjustes(); escanearMusica(); }});
         findViewById(R.id.btnDescargarArt).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ descargarFaltantes(); }});
@@ -382,6 +376,8 @@ public class MainActivity extends Activity {
         if (!listas.has("Favoritas")) { try { listas.put("Favoritas", new org.json.JSONArray()); } catch (Exception e) {} }
         findViewById(R.id.tabCarpetas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ setTab(0); }});
         findViewById(R.id.tabListas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ setTab(1); }});
+        findViewById(R.id.tabVideos).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ setTab(2); }});
+        findViewById(R.id.btnCerrarVideo).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ cerrarVideo(); }});
         findViewById(R.id.btnFav).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ toggleFav(); }});
         findViewById(R.id.btnMasLista).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarMasLista(); }});
         findViewById(R.id.btnBorrarActual).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ borrarCancionActual(); }});
@@ -501,7 +497,7 @@ public class MainActivity extends Activity {
         }});
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int position, long idd) {
-                if (modo == 0) { if (tab == 0) abrirCarpeta(position); else abrirLista(position); }
+                if (modo == 0) { if (tab == 0) abrirCarpeta(position); else if (tab == 1) abrirLista(position); else abrirVideo(position); }
                 else { reproducirDeCarpeta(position); }
             }
         });
@@ -572,6 +568,7 @@ public class MainActivity extends Activity {
             public void run() {
                 final ArrayList<Song> found = new ArrayList<Song>();
                 Set<String> vistos = new HashSet<String>();
+                videos.clear(); vistosVideo.clear();
                 for (File root : raices()) {
                     buscarAudio(root, found, vistos, 0);
                 }
@@ -626,6 +623,81 @@ public class MainActivity extends Activity {
         r.addAll(raicesBase());
         return r;
     }
+    // Cuenta rápida de canciones en una carpeta (poca profundidad) para saber si tiene música
+    private int contarMusicaRapido(File dir, int depth) {
+        if (dir == null || depth > 4) return 0;
+        File[] hijos; try { hijos = dir.listFiles(); } catch (Exception e) { return 0; }
+        if (hijos == null) return 0;
+        int n = 0;
+        for (File f : hijos) {
+            try {
+                if (f.isDirectory()) {
+                    String nm = f.getName();
+                    if (nm.startsWith(".") || nm.equalsIgnoreCase("Android")) continue;
+                    n += contarMusicaRapido(f, depth + 1);
+                } else {
+                    String low = f.getName().toLowerCase(Locale.US);
+                    if (low.endsWith(".mp3") || low.endsWith(".m4a") || low.endsWith(".aac") || low.endsWith(".flac") || low.endsWith(".wav") || low.endsWith(".ogg")) n++;
+                }
+                if (n > 300) return n;  // suficiente para saber que tiene música
+            } catch (Exception e) {}
+        }
+        return n;
+    }
+    // Busca la MEMORIA USB (externa, no la interna) que tenga música. Devuelve su ruta o null.
+    private String detectarRutaUsb() {
+        String interno = "";
+        try { interno = Environment.getExternalStorageDirectory().getCanonicalPath(); } catch (Exception e) { try { interno = Environment.getExternalStorageDirectory().getAbsolutePath(); } catch (Exception e2) {} }
+        java.util.LinkedHashSet<String> cand = new java.util.LinkedHashSet<String>();
+        try { String sec = System.getenv("SECONDARY_STORAGE"); if (sec != null) for (String p : sec.split(":")) cand.add(p); } catch (Exception e) {}
+        for (String raiz : new String[]{ "/storage", "/mnt", "/mnt/media_rw" }) {
+            File r = new File(raiz);
+            File[] hs = null; try { hs = r.listFiles(); } catch (Exception e) {}
+            if (hs != null) for (File h : hs) { try { if (h.isDirectory() && h.canRead()) cand.add(h.getAbsolutePath()); } catch (Exception e) {} }
+        }
+        String mejor = null; int mejorN = 0;
+        for (String p : cand) {
+            try {
+                File f = new File(p);
+                if (!f.isDirectory() || !f.canRead()) continue;
+                String cp; try { cp = f.getCanonicalPath(); } catch (Exception e) { cp = f.getAbsolutePath(); }
+                String low = cp.toLowerCase(Locale.US);
+                if (cp.equals(interno)) continue;
+                if (low.endsWith("/emulated") || low.endsWith("/self") || low.equals("/storage") || low.equals("/mnt") || low.contains("emulated/0")) continue;
+                int n = contarMusicaRapido(f, 0);
+                if (n > mejorN) { mejorN = n; mejor = cp; }
+            } catch (Exception e) {}
+        }
+        return mejorN > 0 ? mejor : null;
+    }
+    // Detecta el USB y enfoca SOLO en él (ignora la memoria interna del radio)
+    private void detectarYEnfocarUsb() {
+        final TextView t = (TextView) findViewById(R.id.txtDetectUsb);
+        if (t != null) t.setText("Buscando la memoria USB…");
+        new Thread(new Runnable() {
+            public void run() {
+                final String usb = detectarRutaUsb();
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (usb != null) {
+                            carpetaVinculada = usb;
+                            prefs.edit().putString("carpetaVinc", usb).apply();
+                            if (t != null) t.setText("Enfocado en el USB. Cargando…");
+                            escanearMusica();
+                            handler.postDelayed(new Runnable(){ public void run(){
+                                if (t != null) t.setText("USB: " + totalCanciones() + " canciones (solo memoria USB)");
+                                pintarAjustes();
+                            }}, 1200);
+                        } else {
+                            if (t != null) t.setText("No se encontró memoria USB con música. Revisa que esté conectada.");
+                            escanearMusica();
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
     private ArrayList<File> raicesBase() {
         LinkedHashSet<String> paths = new LinkedHashSet<String>();
         try { paths.add(Environment.getExternalStorageDirectory().getAbsolutePath()); } catch (Exception e) {}
@@ -672,6 +744,16 @@ public class MainActivity extends Activity {
                         s.albumId = 0;
                         try { s.fecha = f.lastModified(); } catch (Exception ex) { s.fecha = 0; }
                         out.add(s);
+                    } else if (low.endsWith(".mp4") || low.endsWith(".3gp") || low.endsWith(".m4v")
+                        || low.endsWith(".mkv") || low.endsWith(".webm") || low.endsWith(".avi") || low.endsWith(".mov")) {
+                        String path = f.getAbsolutePath();
+                        if (vistosVideo.contains(path)) continue;
+                        vistosVideo.add(path);
+                        Song v = new Song();
+                        v.path = path;
+                        v.title = limpiarNombre(f.getName());
+                        try { v.fecha = f.lastModified(); } catch (Exception ex) { v.fecha = 0; }
+                        videos.add(v);
                     }
                 }
             } catch (Exception e) {}
@@ -823,6 +905,9 @@ public class MainActivity extends Activity {
         findViewById(R.id.tabCarpetas).setBackgroundColor(t == 0 ? 0xFF262633 : 0xFF1C1C26);
         ((Button) findViewById(R.id.tabListas)).setTextColor(t == 1 ? accent : 0xFF8B8B9A);
         findViewById(R.id.tabListas).setBackgroundColor(t == 1 ? 0xFF262633 : 0xFF1C1C26);
+        Button tv = (Button) findViewById(R.id.tabVideos);
+        if (tv != null) { tv.setTextColor(t == 2 ? accent : 0xFF8B8B9A); tv.setBackgroundColor(t == 2 ? 0xFF262633 : 0xFF1C1C26); }
+        if (t == 0) { calcularPortadasCarpetas(); }
         if (t == 1) { construirNombresListas(); calcularPortadasListas(); }
         adapter.notifyDataSetChanged();
         list.setSelection(0);
@@ -1258,6 +1343,8 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        View pv = findViewById(R.id.paneVideo);
+        if (pv != null && pv.getVisibility() == View.VISIBLE) { cerrarVideo(); return; }
         if (paneExplorar != null && paneExplorar.getVisibility() == View.VISIBLE) { mostrarPane(2); return; }
         if (paneAjustes != null && paneAjustes.getVisibility() == View.VISIBLE) { mostrarPane(0); return; }
         if (paneLista != null && paneLista.getVisibility() == View.VISIBLE) { atrasEnLista(); return; }
@@ -1374,25 +1461,43 @@ public class MainActivity extends Activity {
         return null;
     }
     // Arma varias búsquedas posibles, de la más precisa a la más simple
+    // Devuelve el nombre para partir por guión: quita extensión y número de pista, PERO conserva los "-"
+    private String nombreParaPartir(Song s) {
+        String n = (s.title != null && s.title.trim().length() > 0) ? s.title : nombreDe(s);
+        if (n == null) return "";
+        int dot = n.lastIndexOf('.');
+        if (dot > 0 && (n.length() - dot) <= 5) n = n.substring(0, dot);
+        n = n.replaceAll("^\\s*\\d{1,3}\\s*[-_.)]+\\s*", "");   // quitar "01 - " del inicio
+        n = n.replace('_', ' ');
+        return n.trim();
+    }
     private java.util.ArrayList<String> terminosBusqueda(Song s) {
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<String>();
         String art = (s.artist != null && !s.artist.equalsIgnoreCase("Desconocido")) ? limpiarBusqueda(s.artist) : "";
         String titLimpio = limpiarBusqueda(s.title);
-        String fileLimpio = limpiarBusqueda(nombreDe(s));
-        if (s.album != null && s.album.length() > 0 && art.length() > 0) set.add(art + " " + limpiarBusqueda(s.album));
-        if (art.length() > 0 && titLimpio.length() > 0) set.add(art + " " + titLimpio);
-        if (titLimpio.length() > 0) set.add(titLimpio);
-        // Muchos MP3 traen "Artista - Cancion" en el nombre; separarlo
-        for (String cand : new String[]{ s.title, nombreDe(s) }) {
-            String c = limpiarBusqueda(cand);
-            if (c.indexOf(" ") > 0 && (cand != null && (cand.indexOf(" - ") >= 0 || cand.indexOf("-") >= 0))) {
-                String[] pz = c.split("\\s+");
-                if (pz.length >= 2) set.add(c);  // ya viene limpio, artista+cancion junto
+
+        // 1) Estructura del archivo "Artista - Canción": izquierda = ARTISTA, derecha = CANCIÓN
+        String base = nombreParaPartir(s);
+        if (base.indexOf("-") >= 0) {
+            String[] pz = base.split("\\s*-\\s*");
+            if (pz.length >= 2) {
+                String artistaIzq = limpiarBusqueda(pz[0]);                 // izquierda
+                String cancionDer = limpiarBusqueda(pz[pz.length - 1]);     // derecha
+                if (artistaIzq.length() > 0 && cancionDer.length() > 0) set.add(artistaIzq + " " + cancionDer); // artista + canción (lo más preciso)
+                if (cancionDer.length() > 0) set.add(cancionDer);           // solo la canción
+                if (artistaIzq.length() > 0) set.add(artistaIzq);          // solo el artista
             }
         }
+        // 2) De los tags reales (si existen)
+        if (art.length() > 0 && titLimpio.length() > 0) set.add(art + " " + titLimpio);
+        if (s.album != null && s.album.length() > 0 && art.length() > 0) set.add(art + " " + limpiarBusqueda(s.album));
+        if (titLimpio.length() > 0) set.add(titLimpio);
+        // 3) nombre completo limpio como último recurso
+        String fileLimpio = limpiarBusqueda(nombreDe(s));
         if (fileLimpio.length() > 0) set.add(fileLimpio);
+
         java.util.ArrayList<String> out = new java.util.ArrayList<String>();
-        for (String q : set) { if (q != null && q.trim().length() >= 3 && out.size() < 5) out.add(q.trim()); }
+        for (String q : set) { if (q != null && q.trim().length() >= 3 && out.size() < 6) out.add(q.trim()); }
         return out;
     }
     // Limpia un texto para buscar: quita nº de pista, extensión, (adornos), y palabras de ruido
@@ -1681,10 +1786,10 @@ public class MainActivity extends Activity {
                     String a = i.getAction();
                     if (a == null) return;
                     if (a.equals(android.content.Intent.ACTION_MEDIA_MOUNTED)) {
-                        // USB CONECTADO: reescanear si la opción está encendida
+                        // USB CONECTADO: enfocar en el USB (ignora la interna) si la opción está encendida
                         if (optAutoDetectar) {
-                            Toast.makeText(MainActivity.this, "USB detectado, cargando música…", Toast.LENGTH_SHORT).show();
-                            handler.postDelayed(new Runnable(){ public void run(){ escanearMusica(); } }, 1800);
+                            Toast.makeText(MainActivity.this, "USB detectado, enfocando…", Toast.LENGTH_SHORT).show();
+                            handler.postDelayed(new Runnable(){ public void run(){ detectarYEnfocarUsb(); } }, 1800);
                         }
                     } else {
                         // USB DESCONECTADO: cortar si está sonando y reescanear para quitar lo que ya no está
@@ -1728,6 +1833,49 @@ public class MainActivity extends Activity {
     }
 
     // Cambiar carátula manual (tocando la carátula): buscar y elegir
+    // ---- Reproductor de video ----
+    private android.widget.VideoView videoView;
+    private void abrirVideo(int position) {
+        if (position < 0 || position >= videos.size()) return;
+        final Song vid = videos.get(position);
+        // Pausar la música para no encimar audio
+        try { if (mp != null && mp.isPlaying()) { mp.pause(); pintarPlay(false); } } catch (Exception e) {}
+        final View pane = findViewById(R.id.paneVideo);
+        if (videoView == null) {
+            videoView = (android.widget.VideoView) findViewById(R.id.videoView);
+            android.widget.MediaController mc = new android.widget.MediaController(this);
+            mc.setAnchorView(videoView);
+            videoView.setMediaController(mc);
+            videoView.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener(){
+                public void onPrepared(android.media.MediaPlayer m){ try { m.start(); } catch (Exception e) {} }
+            });
+            videoView.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener(){
+                public boolean onError(android.media.MediaPlayer m, int a, int b){
+                    Toast.makeText(MainActivity.this, "Este video no se puede reproducir en el radio (formato no compatible)", Toast.LENGTH_LONG).show();
+                    cerrarVideo();
+                    return true;
+                }
+            });
+            videoView.setOnCompletionListener(new android.media.MediaPlayer.OnCompletionListener(){
+                public void onCompletion(android.media.MediaPlayer m){ cerrarVideo(); }
+            });
+        }
+        pane.setVisibility(View.VISIBLE);
+        try {
+            videoView.setVideoPath(vid.path);
+            videoView.requestFocus();
+            videoView.start();
+        } catch (Exception e) {
+            Toast.makeText(this, "No se pudo abrir el video", Toast.LENGTH_SHORT).show();
+            cerrarVideo();
+        }
+    }
+    private void cerrarVideo() {
+        try { if (videoView != null) { videoView.stopPlayback(); } } catch (Exception e) {}
+        View pane = findViewById(R.id.paneVideo);
+        if (pane != null) pane.setVisibility(View.GONE);
+    }
+
     // Menú al dejar presionada una canción en una carpeta
     private void opcionesCancion(final int p) {
         if (p < 0 || p >= cancionesCarpeta.size()) return;
@@ -2040,65 +2188,69 @@ public class MainActivity extends Activity {
     }
     private void buscarCaratulas(final Song s, final String tit, final String art) {
         final String term = ((art.length() > 0 ? art + " " : "") + tit).trim();
-        if (term.length() == 0) return;
-        Toast.makeText(this, "Buscando…", Toast.LENGTH_SHORT).show();
+        if (term.length() == 0) { Toast.makeText(this, "Escribe el nombre de la canción", Toast.LENGTH_SHORT).show(); return; }
+        Toast.makeText(this, "Buscando carátulas…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             public void run() {
-                final ArrayList<String> labels = new ArrayList<String>();
-                final ArrayList<String> urls = new ArrayList<String>();
-                final boolean[] falloRed = { false };
-                try {
-                    String px = pxCal();
-                    // Apple / iTunes
-                    String url = "https://itunes.apple.com/search?media=music&entity=song&limit=6&term=" + URLEncoder.encode(term, "UTF-8");
-                    String json = httpGet(url);
-                    if (json == null) { falloRed[0] = true; }
-                    else {
-                        org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
-                        if (arr != null) {
-                            for (int i = 0; i < arr.length(); i++) {
-                                org.json.JSONObject o = arr.getJSONObject(i);
-                                String a = o.optString("artworkUrl100", "");
-                                if (a.length() == 0) continue;
-                                labels.add("[Apple] " + o.optString("trackName", "?") + " - " + o.optString("artistName", ""));
-                                urls.add(a.replace("100x100", px));
-                            }
-                        }
-                    }
-                    // Deezer
-                    try {
-                        String url2 = "https://api.deezer.com/search?limit=6&q=" + URLEncoder.encode(term, "UTF-8");
-                        String json2 = httpGet(url2);
-                        if (json2 != null) {
-                            org.json.JSONArray arr2 = new org.json.JSONObject(json2).optJSONArray("data");
-                            if (arr2 != null) {
-                                String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
-                                for (int i = 0; i < arr2.length(); i++) {
-                                    org.json.JSONObject o = arr2.getJSONObject(i);
-                                    org.json.JSONObject alb = o.optJSONObject("album");
-                                    if (alb == null) continue;
-                                    String a = alb.optString(key, alb.optString("cover_big", ""));
-                                    if (a.length() == 0) continue;
-                                    org.json.JSONObject art2 = o.optJSONObject("artist");
-                                    labels.add("[Deezer] " + o.optString("title", "?") + " - " + (art2 != null ? art2.optString("name", "") : ""));
-                                    urls.add(a);
-                                }
-                            }
-                        }
-                    } catch (Exception e2) {}
-                } catch (Exception e) { falloRed[0] = true; }
+                final java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
+                urlsDeItunes(term, urls);
+                urlsDeDeezer(term, urls);
+                while (urls.size() > 9) urls.remove(urls.size() - 1);
+                final java.util.ArrayList<byte[]> bytesList = new java.util.ArrayList<byte[]>();
+                final java.util.ArrayList<android.graphics.Bitmap> thumbs = new java.util.ArrayList<android.graphics.Bitmap>();
+                for (int i = 0; i < urls.size(); i++) {
+                    byte[] b = bajarUrl(urls.get(i));
+                    if (b == null) continue;
+                    android.graphics.Bitmap th = decodeEscalado(b, 240);
+                    if (th == null) continue;
+                    bytesList.add(b); thumbs.add(th);
+                }
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (falloRed[0]) { Toast.makeText(MainActivity.this, "No se pudo conectar. [Conscrypt: " + (conscryptOk ? "SÍ" : "NO") + "] Detalle: " + (ultimoError.length() > 0 ? ultimoError : "desconocido"), Toast.LENGTH_LONG).show(); return; }
-                        if (labels.isEmpty()) { Toast.makeText(MainActivity.this, "Sin resultados para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
-                        new AlertDialog.Builder(MainActivity.this).setTitle("Elige la carátula")
-                            .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
-                                public void onClick(android.content.DialogInterface d, int w) { aplicarCaratula(s, urls.get(w), tit, art); }
-                            }).show();
+                        if (thumbs.isEmpty()) { Toast.makeText(MainActivity.this, "No se encontraron carátulas para esa búsqueda", Toast.LENGTH_SHORT).show(); return; }
+                        mostrarSelectorVisual(s, bytesList, thumbs, tit, art);
                     }
                 });
             }
         }).start();
+    }
+    // Muestra las carátulas en cuadrícula para elegir la correcta con el dedo
+    private void mostrarSelectorVisual(final Song s, final java.util.ArrayList<byte[]> bytesList, final java.util.ArrayList<android.graphics.Bitmap> thumbs, final String tit, final String art) {
+        float d = getResources().getDisplayMetrics().density;
+        final android.widget.GridView g = new android.widget.GridView(this);
+        g.setNumColumns(3);
+        int pad = (int) (8 * d);
+        g.setPadding(pad, pad, pad, pad);
+        g.setHorizontalSpacing(pad); g.setVerticalSpacing(pad);
+        final int sz = (int) (94 * d);
+        g.setAdapter(new BaseAdapter() {
+            public int getCount() { return thumbs.size(); }
+            public Object getItem(int i) { return null; }
+            public long getItemId(int i) { return i; }
+            public View getView(int i, View cv, ViewGroup p) {
+                ImageView iv = (cv instanceof ImageView) ? (ImageView) cv : new ImageView(MainActivity.this);
+                iv.setLayoutParams(new android.widget.AbsListView.LayoutParams(sz, sz));
+                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                iv.setImageBitmap(thumbs.get(i));
+                return iv;
+            }
+        });
+        final AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Toca la carátula correcta").setView(g).setNegativeButton("Cancelar", null).create();
+        g.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
+                try { dlg.dismiss(); } catch (Exception e) {}
+                byte[] img = bytesList.get(pos);
+                aplicarNombre(s, tit, art);
+                artCache.put(s.path, img);
+                if (optEmbed) embedArt(s, img);
+                txtTitle.setText(s.title);
+                txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+                try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                refrescarSiActual(s);
+                Toast.makeText(MainActivity.this, "Carátula guardada", Toast.LENGTH_SHORT).show();
+            }
+        });
+        dlg.show();
     }
     private void aplicarCaratula(final Song s, final String url, final String tit, final String art) {
         Toast.makeText(this, "Bajando carátula…", Toast.LENGTH_SHORT).show();
@@ -2320,11 +2472,14 @@ public class MainActivity extends Activity {
     }
 
     private class SongAdapter extends BaseAdapter {
-        public int getCount() { return modo == 0 ? (tab == 0 ? carpetas.size() : nombresListas.size()) : cancionesCarpeta.size(); }
+        public int getCount() {
+            if (modo == 0) { if (tab == 0) return carpetas.size(); if (tab == 1) return nombresListas.size(); return videos.size(); }
+            return cancionesCarpeta.size();
+        }
         public Object getItem(int i) { return null; }
         public long getItemId(int i) { return i; }
         public int getViewTypeCount() { return 2; }
-        public int getItemViewType(int i) { return modo == 0 ? 0 : 1; }
+        public int getItemViewType(int i) { return (modo == 1 || (modo == 0 && tab == 2)) ? 1 : 0; }
         public View getView(int i, View convertView, ViewGroup parent) {
             int tipo = getItemViewType(i);
             View v = convertView;
@@ -2340,12 +2495,12 @@ public class MainActivity extends Activity {
                 if (tab == 0) {
                     Carpeta c = carpetas.get(i);
                     nm.setText(c.name); ct.setText(c.songs.size() + " canciones");
-                    bmp = portadas.get("c:" + c.name);
+                    synchronized (portadas) { bmp = portadas.get("c:" + c.name); }
                 } else {
                     String n = nombresListas.get(i); int cnt = 0;
                     try { cnt = listas.getJSONArray(n).length(); } catch (Exception e) {}
                     nm.setText((n.equals("Favoritas") ? "★ " : "") + n); ct.setText(cnt + " canciones");
-                    bmp = portadas.get("l:" + n);
+                    synchronized (portadas) { bmp = portadas.get("l:" + n); }
                 }
                 if (bmp != null) th.setImageBitmap(bmp);
                 else th.setImageDrawable(new ColorDrawable(0xFF262633));
@@ -2353,12 +2508,18 @@ public class MainActivity extends Activity {
                 TextView t = (TextView) v.findViewById(R.id.rowTitle);
                 TextView a = (TextView) v.findViewById(R.id.rowArtist);
                 TextView d = (TextView) v.findViewById(R.id.rowDur);
-                Song s = cancionesCarpeta.get(i);
-                t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
-                d.setText(s.dur > 0 ? fmt(s.dur) : "");
-                String actualPath = (posEnOrden >= 0 && posEnOrden < order.size() && order.get(posEnOrden) < songs.size())
-                    ? songs.get(order.get(posEnOrden)).path : null;
-                t.setTextColor(actualPath != null && actualPath.equals(s.path) ? accent : 0xFFF4F4F8);
+                if (modo == 0 && tab == 2) {
+                    Song vid = videos.get(i);
+                    t.setText(vid.title); a.setText("Video"); d.setText("");
+                    t.setTextColor(0xFFF4F4F8);
+                } else {
+                    Song s = cancionesCarpeta.get(i);
+                    t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
+                    d.setText(s.dur > 0 ? fmt(s.dur) : "");
+                    String actualPath = (posEnOrden >= 0 && posEnOrden < order.size() && order.get(posEnOrden) < songs.size())
+                        ? songs.get(order.get(posEnOrden)).path : null;
+                    t.setTextColor(actualPath != null && actualPath.equals(s.path) ? accent : 0xFFF4F4F8);
+                }
             }
             return v;
         }
@@ -2384,9 +2545,10 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() {
                 for (Carpeta c : carpetas) {
-                    if (portadas.containsKey("c:" + c.name)) continue;
+                    boolean ya; synchronized (portadas) { ya = portadas.containsKey("c:" + c.name); }
+                    if (ya) continue;
                     android.graphics.Bitmap b = portadaDe(c.songs);
-                    if (b != null) portadas.put("c:" + c.name, b);
+                    if (b != null) synchronized (portadas) { portadas.put("c:" + c.name, b); }
                 }
                 runOnUiThread(new Runnable() { public void run() { adapter.notifyDataSetChanged(); } });
             }
@@ -2396,11 +2558,12 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() {
                 for (String n : nombresListas) {
-                    if (portadas.containsKey("l:" + n)) continue;
+                    boolean ya; synchronized (portadas) { ya = portadas.containsKey("l:" + n); }
+                    if (ya) continue;
                     ArrayList<Song> arr = new ArrayList<Song>();
                     try { org.json.JSONArray a = listas.getJSONArray(n); for (int k = 0; k < a.length() && k < 8; k++) { Song s = songPorRuta(a.optString(k)); if (s != null) arr.add(s); } } catch (Exception e) {}
                     android.graphics.Bitmap b = portadaDe(arr);
-                    if (b != null) portadas.put("l:" + n, b);
+                    if (b != null) synchronized (portadas) { portadas.put("l:" + n, b); }
                 }
                 runOnUiThread(new Runnable() { public void run() { adapter.notifyDataSetChanged(); } });
             }
@@ -2425,6 +2588,7 @@ public class MainActivity extends Activity {
         try { if (particles != null) particles.parar(); } catch (Exception e) {}
         try { if (mbCn != null) am.unregisterMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
         try { if (servidor != null) servidor.detener(); } catch (Exception e) {}
+        try { if (videoView != null) videoView.stopPlayback(); } catch (Exception e) {}
         if (activo == this) activo = null;
         liberarWake();
         try { if (eq != null) eq.release(); } catch (Exception e) {}
@@ -2437,12 +2601,12 @@ public class MainActivity extends Activity {
         try { super.onTrimMemory(level); } catch (Exception e) {}
         if (level >= TRIM_MEMORY_RUNNING_LOW) {
             try { artCache.clear(); } catch (Exception e) {}
-            try { portadas.clear(); } catch (Exception e) {}
+            synchronized (portadas) { try { portadas.clear(); } catch (Exception e) {} }
         }
     }
     public void onLowMemory() {
         try { super.onLowMemory(); } catch (Exception e) {}
         try { artCache.clear(); } catch (Exception e) {}
-        try { portadas.clear(); } catch (Exception e) {}
+        synchronized (portadas) { try { portadas.clear(); } catch (Exception e) {} }
     }
 }
