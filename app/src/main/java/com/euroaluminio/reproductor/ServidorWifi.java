@@ -91,7 +91,13 @@ public class ServidorWifi {
                         fos.flush();
                     } catch (Throwable wt) { completo = false; err = "" + wt; }
                     try { fos.close(); } catch (Exception e) {}
-                    if (completo && falta <= 0) { ok = true; if (cb != null) cb.archivoRecibido(nombre); }
+                    if (completo && falta <= 0) { ok = true; if (cb != null) cb.archivoRecibido(nombre);
+                        String ruta2 = dir.getAbsolutePath();
+                        String low2 = ruta2.toLowerCase();
+                        boolean enUsb = low2.indexOf("emulated") < 0 && !low2.startsWith("/sdcard") && low2.indexOf("/data/") < 0;
+                        responder(out, "200 OK", "text/plain; charset=utf-8", (enUsb ? "OK en USB: " : "OJO: guardado en memoria INTERNA (no se detectó USB): ") + ruta2);
+                        out.flush(); try { s.close(); } catch (Exception e) {} return;
+                    }
                     else { try { dest.delete(); } catch (Exception e) {}   // borrar archivo a medias
                         if (err.length() == 0) err = "Se cortó la subida"; }
                 } catch (Throwable t) { ok = false; err = "" + t; }
@@ -139,9 +145,21 @@ public class ServidorWifi {
         n = n.replace("\\", "/");
         int barra = n.lastIndexOf('/');
         if (barra >= 0) n = n.substring(barra + 1);
-        n = n.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-        if (n.length() == 0) n = "cancion.mp3";
-        return n;
+        // Separar extensión
+        String ext = "";
+        int dot = n.lastIndexOf('.');
+        if (dot > 0 && (n.length() - dot) <= 5) { ext = n.substring(dot); n = n.substring(0, dot); }
+        // Quitar emojis y símbolos que el USB (FAT32) no acepta. Dejar letras (con acentos), números, espacio y . - _ ( ) [ ]
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < n.length(); i++) {
+            char c = n.charAt(i);
+            if (Character.isLetterOrDigit(c) || c == ' ' || c == '.' || c == '-' || c == '_' || c == '(' || c == ')' || c == '[' || c == ']' || c == '&' || c == '\'') b.append(c);
+            // todo lo demás (emojis, notas musicales, :, *, ?, etc.) se descarta
+        }
+        n = b.toString().replaceAll("\\s+", " ").trim();
+        ext = ext.replaceAll("[^A-Za-z0-9.]", "");
+        if (n.length() == 0) n = "archivo";
+        return n + ext;
     }
 
     private String paginaHtml() {
@@ -169,7 +187,7 @@ public class ServidorWifi {
             + "var file=fs[i];var row=document.createElement('div');row.className='fila prog';row.textContent='Enviando: '+file.name+' ...';lista.appendChild(row);"
             + "var xhr=new XMLHttpRequest();xhr.open('POST','/subir?nombre='+encodeURIComponent(file.name));"
             + "xhr.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);row.textContent='Enviando: '+file.name+' '+p+'%';}};"
-            + "xhr.onload=function(){if(xhr.status==200){row.className='fila ok';row.textContent='OK: '+file.name;}else{row.className='fila err';row.textContent=(xhr.responseText||'Error')+' : '+file.name;}subir(fs,i+1);};"
+            + "xhr.onload=function(){if(xhr.status==200){row.className='fila ok';row.textContent=(xhr.responseText||'OK')+' — '+file.name;}else{row.className='fila err';row.textContent=(xhr.responseText||'Error')+' : '+file.name;}subir(fs,i+1);};"
             + "xhr.onerror=function(){row.className='fila err';row.textContent='Error: '+file.name;subir(fs,i+1);};"
             + "xhr.send(file);}"
             + "</script></body></html>";
