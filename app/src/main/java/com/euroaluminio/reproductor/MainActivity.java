@@ -159,17 +159,49 @@ public class MainActivity extends Activity {
             });
             servidor.iniciar();
             final String url = "http://" + ip + ":" + servidor.puerto;
+            float dens = getResources().getDisplayMetrics().density;
+            android.widget.LinearLayout ly = new android.widget.LinearLayout(this);
+            ly.setOrientation(android.widget.LinearLayout.VERTICAL);
+            ly.setGravity(android.view.Gravity.CENTER);
+            int pad = (int) (16 * dens); ly.setPadding(pad, pad, pad, pad);
+            TextView tv1 = new TextView(this);
+            tv1.setText("Escanea este código con la cámara del celular (te abre la página directo):");
+            tv1.setTextColor(0xFFF4F4F8); tv1.setGravity(android.view.Gravity.CENTER); tv1.setTextSize(14);
+            ImageView iv = new ImageView(this);
+            Bitmap qr = generarQR(url, 500);
+            if (qr != null) iv.setImageBitmap(qr);
+            int qs = (int) (220 * dens);
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(qs, qs);
+            lp.topMargin = (int) (12 * dens); lp.bottomMargin = (int) (12 * dens); iv.setLayoutParams(lp);
+            TextView tv2 = new TextView(this);
+            tv2.setText("O abre a mano:  " + url);
+            tv2.setTextColor(0xFF8B8B9A); tv2.setGravity(android.view.Gravity.CENTER); tv2.setTextSize(13);
+            ly.addView(tv1); ly.addView(iv); ly.addView(tv2);
             new AlertDialog.Builder(this)
                 .setTitle("Recibir por WiFi — ACTIVO")
-                .setMessage("1) Conecta tu CELULAR a la MISMA red WiFi que el radio.\n\n"
-                    + "2) Abre esta dirección en el navegador del celular:\n\n        " + url + "\n\n"
-                    + "3) Elige canciones o videos y se copian a la carpeta Descarga.\n\n"
-                    + "(Deja esta app abierta mientras envías. Toca de nuevo el botón para apagar.)")
+                .setView(ly)
                 .setPositiveButton("Entendido", null).show();
         } catch (Exception e) {
             Toast.makeText(this, "No se pudo iniciar: " + e.getMessage(), Toast.LENGTH_LONG).show();
             servidor = null;
         }
+    }
+    // Genera un código QR (sin internet) con la dirección para conectarse
+    private Bitmap generarQR(String texto, int size) {
+        try {
+            com.google.zxing.qrcode.QRCodeWriter writer = new com.google.zxing.qrcode.QRCodeWriter();
+            java.util.Hashtable<com.google.zxing.EncodeHintType, Object> hints = new java.util.Hashtable<com.google.zxing.EncodeHintType, Object>();
+            hints.put(com.google.zxing.EncodeHintType.MARGIN, 1);
+            com.google.zxing.common.BitMatrix bm = writer.encode(texto, com.google.zxing.BarcodeFormat.QR_CODE, size, size, hints);
+            int[] px = new int[size * size];
+            for (int y = 0; y < size; y++) {
+                int off = y * size;
+                for (int x = 0; x < size; x++) px[off + x] = bm.get(x, y) ? 0xFF000000 : 0xFFFFFFFF;
+            }
+            Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565);
+            bmp.setPixels(px, 0, size, 0, 0, size, size);
+            return bmp;
+        } catch (Throwable e) { return null; }
     }
     // IP del radio en la red WiFi (IPv4 no local)
     private String ipWifi() {
