@@ -2004,9 +2004,13 @@ public class MainActivity extends Activity {
     // Menú al dejar presionada una canción en una carpeta
     private void opcionesCancion(final int p) {
         if (p < 0 || p >= cancionesCarpeta.size()) return;
-        new AlertDialog.Builder(this).setItems(new String[]{ "Mover a otra carpeta", "Eliminar del USB" },
+        new AlertDialog.Builder(this).setItems(new String[]{ "Corregir nombre y carátula", "Mover a otra carpeta", "Eliminar del USB" },
             new android.content.DialogInterface.OnClickListener() {
-                public void onClick(android.content.DialogInterface d, int w) { if (w == 0) moverCancion(p); else borrarCancion(p); }
+                public void onClick(android.content.DialogInterface d, int w) {
+                    if (w == 0) sugerirNombre(cancionesCarpeta.get(p));
+                    else if (w == 1) moverCancion(p);
+                    else borrarCancion(p);
+                }
             }).show();
     }
     // Elegir carpeta destino y mover el archivo
@@ -2309,7 +2313,10 @@ public class MainActivity extends Activity {
         etArt.setText(s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
         box.addView(etTit);
         box.addView(etArt);
-        new AlertDialog.Builder(this).setTitle("Carátula y nombre").setView(box)
+        Button btnSug = new Button(this);
+        btnSug.setText("Sugerir nombre correcto (internet)");
+        box.addView(btnSug);
+        final android.app.AlertDialog dlgCar = new AlertDialog.Builder(this).setTitle("Carátula y nombre").setView(box)
             .setPositiveButton("Ver carátulas disponibles", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface d, int w) {
                     buscarCaratulas(s, etTit.getText().toString().trim(), etArt.getText().toString().trim());
@@ -2321,11 +2328,136 @@ public class MainActivity extends Activity {
                 }
             })
             .setNegativeButton("Cancelar", null).show();
+        btnSug.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { try { dlgCar.dismiss(); } catch (Exception e) {} sugerirNombre(s); }
+        });
     }
     private byte[] artActual(Song s) {
         if (artCache.containsKey(s.path)) return artCache.get(s.path);
         try { MediaMetadataRetriever r = new MediaMetadataRetriever(); r.setDataSource(s.path); byte[] p = r.getEmbeddedPicture(); try { r.release(); } catch (Exception e) {} return p; } catch (Exception e) { return null; }
     }
+    // ==== SUGERIR NOMBRE CORRECTO (busca en iTunes/Deezer y muestra opciones con carátula) ====
+    private void sugItunes(String term, java.util.ArrayList<String[]> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("http://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + q);
+            if (json == null) json = httpGet("https://itunes.apple.com/search?media=music&entity=song&limit=8&term=" + q);
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("results");
+            if (arr == null) return;
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject o = arr.getJSONObject(i);
+                String tit = o.optString("trackName", "");
+                String art = o.optString("artistName", "");
+                String url = o.optString("artworkUrl100", "").replace("100x100", pxCal());
+                if (tit.length() > 0) out.add(new String[]{ tit, art, url });
+            }
+        } catch (Exception e) {}
+    }
+    private void sugDeezer(String term, java.util.ArrayList<String[]> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("http://api.deezer.com/search?limit=8&q=" + q);
+            if (json == null) json = httpGet("https://api.deezer.com/search?limit=8&q=" + q);
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("data");
+            if (arr == null) return;
+            String key = optCalidad.equals("maxima") ? "cover_xl" : optCalidad.equals("normal") ? "cover_medium" : "cover_big";
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject o = arr.getJSONObject(i);
+                String tit = o.optString("title", "");
+                org.json.JSONObject a = o.optJSONObject("artist"); String art = (a != null) ? a.optString("name", "") : "";
+                org.json.JSONObject alb = o.optJSONObject("album");
+                String url = (alb != null) ? alb.optString(key, alb.optString("cover_big", "")) : "";
+                if (tit.length() > 0) out.add(new String[]{ tit, art, url });
+            }
+        } catch (Exception e) {}
+    }
+    private void sugerirNombre(final Song s) {
+        if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
+        if (!hayInternet()) { Toast.makeText(this, "Necesitas internet para sugerir el nombre", Toast.LENGTH_SHORT).show(); return; }
+        Toast.makeText(this, "Buscando el nombre correcto…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            public void run() {
+                try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+                String term = limpiarBusqueda(nombreDe(s));
+                final java.util.ArrayList<String[]> items = new java.util.ArrayList<String[]>();
+                sugItunes(term, items);
+                sugDeezer(term, items);
+                while (items.size() > 8) items.remove(items.size() - 1);
+                final java.util.ArrayList<android.graphics.Bitmap> thumbs = new java.util.ArrayList<android.graphics.Bitmap>();
+                for (int i = 0; i < items.size(); i++) {
+                    byte[] b = bajarUrl(items.get(i)[2]);
+                    thumbs.add(b != null ? decodeEscalado(b, 160) : null);
+                }
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (items.isEmpty()) { Toast.makeText(MainActivity.this, "No se encontraron sugerencias para \"" + nombreDe(s) + "\"", Toast.LENGTH_LONG).show(); return; }
+                        mostrarSugerencias(s, items, thumbs);
+                    }
+                });
+            }
+        }).start();
+    }
+    private void mostrarSugerencias(final Song s, final java.util.ArrayList<String[]> items, final java.util.ArrayList<android.graphics.Bitmap> thumbs) {
+        final float d = getResources().getDisplayMetrics().density;
+        android.widget.ListView lv = new android.widget.ListView(this);
+        lv.setAdapter(new BaseAdapter() {
+            public int getCount() { return items.size(); }
+            public Object getItem(int i) { return null; }
+            public long getItemId(int i) { return i; }
+            public View getView(int i, View cv, ViewGroup p) {
+                android.widget.LinearLayout row = new android.widget.LinearLayout(MainActivity.this);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                int pd = (int) (8 * d); row.setPadding(pd, pd, pd, pd);
+                ImageView iv = new ImageView(MainActivity.this);
+                int sz = (int) (56 * d);
+                iv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(sz, sz));
+                iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                if (thumbs.get(i) != null) iv.setImageBitmap(thumbs.get(i)); else iv.setImageDrawable(new ColorDrawable(0xFF262633));
+                android.widget.LinearLayout col = new android.widget.LinearLayout(MainActivity.this);
+                col.setOrientation(android.widget.LinearLayout.VERTICAL);
+                android.widget.LinearLayout.LayoutParams clp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                clp.leftMargin = (int) (12 * d); col.setLayoutParams(clp);
+                TextView t1 = new TextView(MainActivity.this);
+                t1.setText(items.get(i)[0]); t1.setTextColor(0xFFF4F4F8); t1.setTextSize(16); t1.setTypeface(null, android.graphics.Typeface.BOLD); t1.setSingleLine(true);
+                TextView t2 = new TextView(MainActivity.this);
+                t2.setText(items.get(i)[1]); t2.setTextColor(0xFF8B8B9A); t2.setTextSize(13); t2.setSingleLine(true);
+                col.addView(t1); col.addView(t2);
+                row.addView(iv); row.addView(col);
+                return row;
+            }
+        });
+        final AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Toca el nombre correcto").setView(lv).setNegativeButton("Cancelar", null).create();
+        lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
+                try { dlg.dismiss(); } catch (Exception e) {}
+                final String tit = items.get(pos)[0], art = items.get(pos)[1], url = items.get(pos)[2];
+                s.title = tit; if (art.length() > 0) s.artist = art;
+                txtTitle.setText(s.title);
+                txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+                if (eqNombre != null) eqNombre.setInfo(s.artist, s.title);
+                Toast.makeText(MainActivity.this, "Corrigiendo y bajando carátula…", Toast.LENGTH_SHORT).show();
+                new Thread(new Runnable() {
+                    public void run() {
+                        try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+                        final byte[] img = bajarUrl(url);
+                        if (img != null) { synchronized (artCache) { artCache.put(s.path, img); } if (optEmbed) embedArt(s, img); }
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                refrescarSiActual(s);
+                                try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                                Toast.makeText(MainActivity.this, "Nombre y carátula corregidos", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
+                }).start();
+            }
+        });
+        dlg.show();
+    }
+
     private void aplicarNombre(Song s, String tit, String art) {
         if (tit != null && tit.length() > 0) s.title = tit;
         if (art != null && art.length() > 0) s.artist = art;
