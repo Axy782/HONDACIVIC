@@ -2434,25 +2434,34 @@ public class MainActivity extends Activity {
             public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                 try { dlg.dismiss(); } catch (Exception e) {}
                 final String tit = items.get(pos)[0], art = items.get(pos)[1], url = items.get(pos)[2];
-                s.title = tit; if (art.length() > 0) s.artist = art;
-                txtTitle.setText(s.title);
-                txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
-                if (eqNombre != null) eqNombre.setInfo(s.artist, s.title);
-                Toast.makeText(MainActivity.this, "Corrigiendo y bajando carátula…", Toast.LENGTH_SHORT).show();
-                new Thread(new Runnable() {
-                    public void run() {
-                        try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
-                        final byte[] img = bajarUrl(url);
-                        if (img != null) { synchronized (artCache) { artCache.put(s.path, img); } if (optEmbed) embedArt(s, img); }
-                        runOnUiThread(new Runnable() {
-                            public void run() {
-                                refrescarSiActual(s);
-                                try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
-                                Toast.makeText(MainActivity.this, "Nombre y carátula corregidos", Toast.LENGTH_SHORT).show();
-                            }
-                        });
-                    }
-                }).start();
+                new AlertDialog.Builder(MainActivity.this)
+                    .setTitle(tit + (art.length() > 0 ? " - " + art : ""))
+                    .setItems(new String[]{ "Solo corregir el nombre", "Nombre + carátula" }, new android.content.DialogInterface.OnClickListener() {
+                        public void onClick(android.content.DialogInterface dd, int w) {
+                            final boolean conCaratula = (w == 1);
+                            s.title = tit; if (art.length() > 0) s.artist = art;
+                            txtTitle.setText(s.title);
+                            txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
+                            if (eqNombre != null) eqNombre.setInfo(s.artist, s.title);
+                            Toast.makeText(MainActivity.this, conCaratula ? "Corrigiendo y bajando carátula…" : "Guardando el nombre…", Toast.LENGTH_SHORT).show();
+                            new Thread(new Runnable() {
+                                public void run() {
+                                    try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+                                    byte[] img = conCaratula ? bajarUrl(url) : null;
+                                    if (img != null) { synchronized (artCache) { artCache.put(s.path, img); } }
+                                    final byte[] paraEmbeber = (conCaratula && img != null) ? img : artActual(s);
+                                    if (optEmbed) embedArt(s, paraEmbeber);
+                                    runOnUiThread(new Runnable() {
+                                        public void run() {
+                                            refrescarSiActual(s);
+                                            try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                                            Toast.makeText(MainActivity.this, conCaratula ? "Nombre y carátula corregidos" : "Nombre corregido", Toast.LENGTH_SHORT).show();
+                                        }
+                                    });
+                                }
+                            }).start();
+                        }
+                    }).show();
             }
         });
         dlg.show();
