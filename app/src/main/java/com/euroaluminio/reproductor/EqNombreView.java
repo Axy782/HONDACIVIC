@@ -24,22 +24,39 @@ public class EqNombreView extends View {
     private long lastT = 0;
     private final java.util.Random rnd = new java.util.Random();
     private boolean tieneAudio = false;   // true cuando llega FFT real
+    private float picoGlobal = 8f;         // para auto-ganancia (se adapta al volumen de la canción)
 
-    // Recibe el análisis de frecuencias del audio (graves, medios, agudos)
+    // Recibe el análisis de frecuencias del audio y hace que las barras BAILEN con el ritmo
     public void setFft(byte[] fft) {
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
+        float[] raw = new float[N];
+        float maxMag = 1f;
         for (int i = 0; i < N; i++) {
-            int idx = 2 + (i * (bins - 2) / N) * 2;   // de graves (izq) a agudos (der)
-            if (idx + 1 >= fft.length) { target[i] = 0.05f; continue; }
-            float re = fft[idx], im = fft[idx + 1];
-            float mag = (float) Math.sqrt(re * re + im * im);
-            float boost = 1.0f + (1.0f - (float) i / N) * 0.8f;   // los graves pesan más (como el video)
-            float val = (mag / 90f) * boost;
+            int start = 1 + (i * (bins - 1)) / N;
+            int end = 1 + ((i + 1) * (bins - 1)) / N;
+            if (end <= start) end = start + 1;
+            float sum = 0; int cnt = 0;
+            for (int b = start; b < end && (b * 2 + 1) < fft.length; b++) {
+                float re = fft[b * 2], im = fft[b * 2 + 1];
+                sum += (float) Math.sqrt(re * re + im * im); cnt++;
+            }
+            float mag = (cnt > 0) ? sum / cnt : 0;
+            mag *= 1.0f + (1.0f - (float) i / N) * 1.2f;   // realce de graves (izquierda pega más)
+            raw[i] = mag;
+            if (mag > maxMag) maxMag = mag;
+        }
+        // Auto-ganancia: sigue el pico reciente para usar siempre toda la altura (baja lento)
+        picoGlobal = Math.max(maxMag, picoGlobal * 0.92f);
+        if (picoGlobal < 8f) picoGlobal = 8f;
+        for (int i = 0; i < N; i++) {
+            float val = raw[i] / picoGlobal;                              // 0..1
+            val = (float) (Math.log(1 + val * 9) / Math.log(10));        // log = más vivo
             if (val > 1f) val = 1f;
-            if (val < 0.04f) val = 0.04f;
-            if (val > target[i]) target[i] = val; else target[i] = target[i] * 0.75f + val * 0.25f;   // sube rápido, baja suave
+            if (val < 0.03f) val = 0.03f;
+            if (val > target[i]) target[i] = val;                        // ataque: salta con el golpe
+            else target[i] = target[i] * 0.82f + val * 0.18f;            // caída suave
         }
         if (activo) postInvalidate();
     }
@@ -105,11 +122,12 @@ public class EqNombreView extends View {
             lastT = now;
             for (int i = 0; i < N; i++) target[i] = sonando ? (0.15f + rnd.nextFloat() * 0.85f) : 0.05f;
         }
-        if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.05f; }
+        if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.03f; }
         for (int i = 0; i < N; i++) {
-            h[i] += (target[i] - h[i]) * 0.4f;
-            float bh = h[i] * 26 * sc + 2;
-            cv.drawRect(bx + i * step, by, bx + i * step + step * 0.5f, by + bh, pBar);
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.6f;    // sube rápido (salta con el golpe)
+            else h[i] += (target[i] - h[i]) * 0.28f;                     // baja suave
+            float bh = h[i] * 32 * sc + 2;
+            cv.drawRect(bx + i * step, by, bx + i * step + step * 0.55f, by + bh, pBar);
         }
         if (activo && sonando && !tieneAudio) postInvalidateDelayed(70);   // con FFT, se redibuja cuando llega audio
     }
