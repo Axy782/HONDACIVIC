@@ -163,29 +163,30 @@ public class MainActivity extends Activity {
             android.widget.LinearLayout ly = new android.widget.LinearLayout(this);
             ly.setOrientation(android.widget.LinearLayout.VERTICAL);
             ly.setGravity(android.view.Gravity.CENTER);
-            int pad = (int) (16 * dens); ly.setPadding(pad, pad, pad, pad);
+            int pad = (int) (10 * dens); ly.setPadding(pad, pad, pad, pad);
             TextView tv1 = new TextView(this);
-            tv1.setText("Escanea este código con la cámara del celular (te abre la página directo):");
-            tv1.setTextColor(0xFFF4F4F8); tv1.setGravity(android.view.Gravity.CENTER); tv1.setTextSize(14);
+            tv1.setText("Escanea el QR con la cámara, o escribe la dirección de abajo:");
+            tv1.setTextColor(0xFFF4F4F8); tv1.setGravity(android.view.Gravity.CENTER); tv1.setTextSize(13);
             ImageView iv = new ImageView(this);
-            Bitmap qr = generarQR(url, 500);
+            Bitmap qr = generarQR(url, 400);
             if (qr != null) iv.setImageBitmap(qr);
-            int qs = (int) (220 * dens);
+            int qs = (int) (150 * dens);   // QR más chico para que quepa la dirección
             android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(qs, qs);
-            lp.topMargin = (int) (12 * dens); lp.bottomMargin = (int) (12 * dens); iv.setLayoutParams(lp);
+            lp.topMargin = (int) (8 * dens); lp.bottomMargin = (int) (8 * dens); iv.setLayoutParams(lp);
             TextView tv2 = new TextView(this);
             tv2.setText(url);
             tv2.setTextColor(0xFFFFB300); tv2.setGravity(android.view.Gravity.CENTER);
-            tv2.setTextSize(22); tv2.setTypeface(null, android.graphics.Typeface.BOLD);
-            tv2.setPadding(0, (int)(6*dens), 0, 0);
+            tv2.setTextSize(24); tv2.setTypeface(null, android.graphics.Typeface.BOLD);
             TextView tv3 = new TextView(this);
-            tv3.setText("Escanea el QR, O escribe esta dirección en el navegador del celular.");
-            tv3.setTextColor(0xFF8B8B9A); tv3.setGravity(android.view.Gravity.CENTER); tv3.setTextSize(12);
-            tv3.setPadding(0, (int)(6*dens), 0, 0);
+            tv3.setText("(si tu celular no lee QR, escribe esa dirección en el navegador)");
+            tv3.setTextColor(0xFF8B8B9A); tv3.setGravity(android.view.Gravity.CENTER); tv3.setTextSize(11);
+            tv3.setPadding(0, (int)(4*dens), 0, 0);
             ly.addView(tv1); ly.addView(iv); ly.addView(tv2); ly.addView(tv3);
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.addView(ly);
             new AlertDialog.Builder(this)
                 .setTitle("Recibir por WiFi — ACTIVO")
-                .setView(ly)
+                .setView(sv)
                 .setPositiveButton("Entendido", null).show();
         } catch (Exception e) {
             Toast.makeText(this, "No se pudo iniciar: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -547,6 +548,12 @@ public class MainActivity extends Activity {
             try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); imm.hideSoftInputFromWindow(etBuscar.getWindowToken(), 0); } catch (Exception e) {}
         }});
         findViewById(R.id.btnVozBuscar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ buscarPorVoz(); }});
+        // Si el radio NO tiene reconocimiento de voz (no trae la app de Google), esconder el botón
+        try {
+            java.util.List<android.content.pm.ResolveInfo> lv = getPackageManager().queryIntentActivities(
+                new android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0);
+            if (lv == null || lv.isEmpty()) findViewById(R.id.btnVozBuscar).setVisibility(View.GONE);
+        } catch (Throwable t) { try { findViewById(R.id.btnVozBuscar).setVisibility(View.GONE); } catch (Exception e) {} }
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int position, long idd) {
                 if (modo == 0) { if (tab == 0) abrirCarpeta(position); else if (tab == 1) abrirLista(position); else abrirVideo(position); }
@@ -1831,7 +1838,7 @@ public class MainActivity extends Activity {
             visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
                 public void onWaveFormDataCapture(Visualizer v, byte[] wave, int rate) {}
                 public void onFftDataCapture(Visualizer v, byte[] data, int rate) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }
-            }, Visualizer.getMaxCaptureRate() / 4, false, true);
+            }, Visualizer.getMaxCaptureRate(), false, true);
             visualizer.setEnabled(true);
         } catch (Throwable t) { visualizer = null; }  // en radios viejos puede fallar: usa animación por tiempo
     }

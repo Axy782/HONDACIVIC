@@ -55,8 +55,8 @@ public class EqNombreView extends View {
             val = (float) (Math.log(1 + val * 9) / Math.log(10));        // log = más vivo
             if (val > 1f) val = 1f;
             if (val < 0.03f) val = 0.03f;
-            if (val > target[i]) target[i] = val;                        // ataque: salta con el golpe
-            else target[i] = target[i] * 0.82f + val * 0.18f;            // caída suave
+            if (val > target[i]) target[i] = val;                        // ataque: salta al instante con el golpe
+            else target[i] = target[i] * 0.6f + val * 0.4f;              // caída más ágil (más natural)
         }
         if (activo) postInvalidate();
     }
@@ -124,8 +124,8 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.03f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.6f;    // sube rápido (salta con el golpe)
-            else h[i] += (target[i] - h[i]) * 0.28f;                     // baja suave
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;    // sube casi instantáneo
+            else h[i] += (target[i] - h[i]) * 0.45f;                     // baja ágil
             float bh = h[i] * 32 * sc + 2;
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.55f, by + bh, pBar);
         }
