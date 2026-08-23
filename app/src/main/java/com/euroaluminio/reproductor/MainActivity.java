@@ -546,6 +546,7 @@ public class MainActivity extends Activity {
             etBuscar.setText("");
             try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); imm.hideSoftInputFromWindow(etBuscar.getWindowToken(), 0); } catch (Exception e) {}
         }});
+        findViewById(R.id.btnVozBuscar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ buscarPorVoz(); }});
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int position, long idd) {
                 if (modo == 0) { if (tab == 0) abrirCarpeta(position); else if (tab == 1) abrirLista(position); else abrirVideo(position); }
@@ -2121,6 +2122,42 @@ public class MainActivity extends Activity {
             b.append(x).append(' ');
         }
         return b.toString().trim();
+    }
+    // Buscar canción por VOZ (manos libres, para usar manejando)
+    private static final int REQ_VOZ = 7001;
+    private void buscarPorVoz() {
+        try {
+            android.content.Intent it = new android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            it.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            it.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "es-DO");
+            it.putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Di el nombre de la canción o artista");
+            startActivityForResult(it, REQ_VOZ);
+        } catch (Throwable t) {
+            Toast.makeText(this, "Este radio no tiene reconocimiento de voz (falta la app de Google)", Toast.LENGTH_LONG).show();
+        }
+    }
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req == REQ_VOZ && res == RESULT_OK && data != null) {
+            try {
+                java.util.ArrayList<String> r = data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);
+                if (r != null && !r.isEmpty()) {
+                    String dicho = r.get(0);
+                    // mostrar en el buscador y filtrar
+                    EditText et = (EditText) findViewById(R.id.etBuscar);
+                    if (et != null) et.setText(dicho);
+                    filtrarBusqueda(dicho);
+                    // Si hay una sola coincidencia clara, reproducirla directo
+                    if (cancionesCarpeta != null && cancionesCarpeta.size() >= 1) {
+                        Toast.makeText(this, "Buscando: " + dicho, Toast.LENGTH_SHORT).show();
+                        // reproducir la primera coincidencia
+                        reproducirDeCarpeta(0);
+                    } else {
+                        Toast.makeText(this, "No encontré: " + dicho, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            } catch (Exception e) {}
+        }
     }
     // Busca canciones por nombre/artista/álbum/archivo en TODAS las carpetas (por palabras, sin acentos)
     private void filtrarBusqueda(String qraw) {
