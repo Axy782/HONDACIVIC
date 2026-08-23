@@ -1834,7 +1834,9 @@ public class MainActivity extends Activity {
             if (visualizer != null) { try { visualizer.release(); } catch (Exception e) {} visualizer = null; }
             if (mp == null) return;
             visualizer = new Visualizer(mp.getAudioSessionId());
-            visualizer.setCaptureSize(Visualizer.getCaptureSizeRange()[0]);
+            int[] rango = Visualizer.getCaptureSizeRange();
+            int cap = 512; if (cap < rango[0]) cap = rango[0]; if (cap > rango[1]) cap = rango[1];
+            visualizer.setCaptureSize(cap);   // más bins = más detalle (cada barra un instrumento)
             visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
                 public void onWaveFormDataCapture(Visualizer v, byte[] wave, int rate) {}
                 public void onFftDataCapture(Visualizer v, byte[] data, int rate) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }

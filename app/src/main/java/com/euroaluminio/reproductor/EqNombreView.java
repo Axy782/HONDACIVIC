@@ -16,7 +16,7 @@ public class EqNombreView extends View {
     private String artista = "", cancion = "";
     private int color = 0xFFFFC107;      // amarillo como el video
     private boolean activo = false, sonando = false;
-    private static final int N = 22;
+    private static final int N = 30;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -34,29 +34,35 @@ public class EqNombreView extends View {
         float[] raw = new float[N];
         float maxMag = 1f;
         for (int i = 0; i < N; i++) {
-            int start = 1 + (i * (bins - 1)) / N;
-            int end = 1 + ((i + 1) * (bins - 1)) / N;
+            // Reparto LOGARÍTMICO: cada barra cubre una banda (graves->agudos), como un ecualizador real
+            int start = (int) Math.pow(bins, (float) i / N);
+            int end = (int) Math.pow(bins, (float) (i + 1) / N);
+            if (start < 1) start = 1;
             if (end <= start) end = start + 1;
+            if (end > bins) end = bins;
             float sum = 0; int cnt = 0;
-            for (int b = start; b < end && (b * 2 + 1) < fft.length; b++) {
-                float re = fft[b * 2], im = fft[b * 2 + 1];
+            for (int b = start; b < end; b++) {
+                int p = b * 2;
+                if (p + 1 >= fft.length) break;
+                float re = fft[p], im = fft[p + 1];
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            mag *= 1.0f + (1.0f - (float) i / N) * 1.2f;   // realce de graves (izquierda pega más)
+            // Ganancia que SUBE con la frecuencia: los agudos tienen menos energía, así todas bailan
+            float gain = 1.0f + 3.2f * ((float) i / N);
+            mag *= gain;
             raw[i] = mag;
             if (mag > maxMag) maxMag = mag;
         }
-        // Auto-ganancia: sigue el pico reciente para usar siempre toda la altura (baja lento)
         picoGlobal = Math.max(maxMag, picoGlobal * 0.92f);
-        if (picoGlobal < 8f) picoGlobal = 8f;
+        if (picoGlobal < 6f) picoGlobal = 6f;
         for (int i = 0; i < N; i++) {
-            float val = raw[i] / picoGlobal;                              // 0..1
-            val = (float) (Math.log(1 + val * 9) / Math.log(10));        // log = más vivo
+            float val = raw[i] / picoGlobal;
+            val = (float) (Math.log(1 + val * 9) / Math.log(10));
             if (val > 1f) val = 1f;
-            if (val < 0.03f) val = 0.03f;
-            if (val > target[i]) target[i] = val;                        // ataque: salta al instante con el golpe
-            else target[i] = target[i] * 0.6f + val * 0.4f;              // caída más ágil (más natural)
+            if (val < 0.02f) val = 0.02f;
+            if (val > target[i]) target[i] = val;                        // ataque: salta al instante
+            else target[i] = target[i] * 0.6f + val * 0.4f;              // caída ágil
         }
         if (activo) postInvalidate();
     }
