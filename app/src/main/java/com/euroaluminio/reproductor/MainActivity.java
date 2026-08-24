@@ -1664,7 +1664,8 @@ public class MainActivity extends Activity {
         x = x.replaceAll("^\\s*\\d{1,3}\\s*[-_.)]+\\s*", "");                    // quitar "01 - ", "07-", "12."
         x = x.replaceAll("\\([^)]*\\)", " ").replaceAll("\\[[^\\]]*\\]", " ");    // quitar (en vivo) [video]
         x = x.replace('_', ' ').replace('-', ' ');
-        x = x.replaceAll("(?i)\\b(official|oficial|video|audio|lyrics?|letra|hd|hq|4k|en vivo|live|version|remaster(ed|izado)?|full|mp3)\\b", " ");
+        x = x.replaceAll("(?i)\\d+\\s*kbps", " ");                                // 320kbps, 128 kbps
+        x = x.replaceAll("(?i)\\b(official|oficial|video|audio|lyrics?|letra|hd|hq|4k|en vivo|live|version|remaster(ed|izado)?|full|mp3|mp4|kbps|descargar|descarga|www|com|net|online|gratis|calidad|estreno|completa|original)\\b", " ");
         x = x.replaceAll("\\s+", " ").trim();
         return x;
     }
@@ -2055,7 +2056,14 @@ public class MainActivity extends Activity {
         }
     }
     private void cerrarVideo() {
-        try { if (videoView != null) { videoView.stopPlayback(); } } catch (Exception e) {}
+        try {
+            if (videoView != null) {
+                videoView.stopPlayback();                                    // detiene y libera el reproductor de video
+                try { videoView.setVideoURI(null); } catch (Exception e) {}  // suelta el archivo por completo
+            }
+        } catch (Exception e) {}
+        videoEstabaReproduciendo = false;   // que la reversa NO lo reviva
+        videoPosGuardada = 0;
         View pane = findViewById(R.id.paneVideo);
         if (pane != null) pane.setVisibility(View.GONE);
     }
@@ -2480,25 +2488,27 @@ public class MainActivity extends Activity {
     }
     private void sugerirNombre(final Song s) {
         if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
+        // Armar artista y canción lo mejor posible
+        String artista = (s.artist != null && !s.artist.equalsIgnoreCase("Desconocido")) ? s.artist.trim() : "";
+        String cancion = (s.title != null) ? s.title.trim() : "";
+        String base = nombreParaPartir(s);
+        if (artista.length() == 0 && base.indexOf("-") >= 0) {
+            String[] pz = base.split("\\s*-\\s*");
+            if (pz.length >= 2) { artista = pz[0].trim(); cancion = pz[pz.length - 1].trim(); }
+        }
+        if (cancion.length() == 0) cancion = base;
+        buscarSugerenciasCon(s, artista, cancion);
+    }
+    private void buscarSugerenciasCon(final Song s, final String artista, final String cancion) {
         if (!hayInternet()) { Toast.makeText(this, "Necesitas internet para sugerir el nombre", Toast.LENGTH_SHORT).show(); return; }
         Toast.makeText(this, "Buscando el nombre correcto…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             public void run() {
                 try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
-                // Armar artista y canción bien (prioriza el artista real)
-                String artista = (s.artist != null && !s.artist.equalsIgnoreCase("Desconocido")) ? s.artist.trim() : "";
-                String cancion = (s.title != null) ? s.title.trim() : "";
-                String base = nombreParaPartir(s);
-                if (artista.length() == 0 && base.indexOf("-") >= 0) {
-                    String[] pz = base.split("\\s*-\\s*");
-                    if (pz.length >= 2) { artista = pz[0].trim(); cancion = pz[pz.length - 1].trim(); }
-                }
-                if (cancion.length() == 0) cancion = base;
-                // Términos en orden de precisión: artista+canción primero
                 java.util.ArrayList<String> terms = new java.util.ArrayList<String>();
-                if (artista.length() > 0) terms.add(limpiarBusqueda(artista + " " + cancion));
-                terms.add(limpiarBusqueda(cancion));
-                if (!base.equalsIgnoreCase(cancion)) terms.add(limpiarBusqueda(base));
+                if (artista.length() > 0 && cancion.length() > 0) terms.add(limpiarBusqueda(artista + " " + cancion));
+                if (cancion.length() > 0) terms.add(limpiarBusqueda(cancion));
+                if (artista.length() > 0) terms.add(limpiarBusqueda(artista));
                 final java.util.ArrayList<String[]> items = new java.util.ArrayList<String[]>();
                 for (int ti = 0; ti < terms.size() && items.size() < 12; ti++) {
                     String term = terms.get(ti);
@@ -2506,9 +2516,7 @@ public class MainActivity extends Activity {
                     sugItunes(term, items);
                     sugDeezer(term, items);
                 }
-                // Tercera fuente: MusicBrainz (con artista+canción)
                 sugMusicBrainz(artista.length() > 0 ? limpiarBusqueda(artista + " " + cancion) : limpiarBusqueda(cancion), items);
-                // Quitar duplicados (mismo título+artista)
                 java.util.HashSet<String> vistos = new java.util.HashSet<String>();
                 java.util.ArrayList<String[]> unicos = new java.util.ArrayList<String[]>();
                 for (int i = 0; i < items.size(); i++) {
@@ -2524,12 +2532,34 @@ public class MainActivity extends Activity {
                 }
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (items.isEmpty()) { Toast.makeText(MainActivity.this, "No se encontraron sugerencias para \"" + nombreDe(s) + "\"", Toast.LENGTH_LONG).show(); return; }
+                        if (items.isEmpty()) { pedirBusquedaManual(s, artista, cancion); return; }
                         mostrarSugerencias(s, items, thumbs);
                     }
                 });
             }
         }).start();
+    }
+    // Si no encontró nada, dejar que el usuario escriba el artista y la canción
+    private void pedirBusquedaManual(final Song s, String artistaIni, String cancionIni) {
+        float d = getResources().getDisplayMetrics().density;
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = (int)(16*d); box.setPadding(pad, pad, pad, pad);
+        TextView msg = new TextView(this);
+        msg.setText("No se encontró nada. Escribe el artista y la canción para buscar:");
+        msg.setTextColor(0xFFB8B8C6); msg.setTextSize(13);
+        final android.widget.EditText etA = new android.widget.EditText(this);
+        etA.setHint("Artista"); etA.setText(artistaIni != null ? artistaIni : ""); etA.setSingleLine(true);
+        final android.widget.EditText etC = new android.widget.EditText(this);
+        etC.setHint("Canción"); etC.setText(cancionIni != null ? cancionIni : ""); etC.setSingleLine(true);
+        box.addView(msg); box.addView(etA); box.addView(etC);
+        new AlertDialog.Builder(this).setTitle("Buscar nombre correcto").setView(box)
+            .setPositiveButton("Buscar", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface dg, int w) {
+                    buscarSugerenciasCon(s, etA.getText().toString().trim(), etC.getText().toString().trim());
+                }
+            })
+            .setNegativeButton("Cancelar", null).show();
     }
     private void mostrarSugerencias(final Song s, final java.util.ArrayList<String[]> items, final java.util.ArrayList<android.graphics.Bitmap> thumbs) {
         final float d = getResources().getDisplayMetrics().density;
@@ -2636,6 +2666,23 @@ public class MainActivity extends Activity {
             }
         } catch (Exception e) {}
     }
+    // Carátulas desde MusicBrainz + Cover Art Archive (capa extra)
+    private void urlsMusicBrainz(String term, java.util.ArrayList<String> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("https://musicbrainz.org/ws/2/release/?query=" + q + "&fmt=json&limit=5");
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("releases");
+            if (arr == null) return;
+            for (int i = 0; i < arr.length(); i++) {
+                String mbid = arr.getJSONObject(i).optString("id", "");
+                if (mbid.length() > 0) {
+                    String u = "https://coverartarchive.org/release/" + mbid + "/front-500";
+                    if (!out.contains(u)) out.add(u);
+                }
+            }
+        } catch (Exception e) {}
+    }
     private void buscarCaratulas(final Song s, final String titIn, final String artIn) {
         Toast.makeText(this, "Buscando carátulas…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
@@ -2654,7 +2701,10 @@ public class MainActivity extends Activity {
                 if (titL.length() > 0) { urlsDeItunes(titL, urls); urlsDeDeezer(titL, urls); }
                 // Capa 3: solo el artista (otros álbumes del artista)
                 if (artL.length() > 0) { urlsDeItunes(artL, urls); urlsDeDeezer(artL, urls); }
-                // Capa 4: FOTO del artista (último recurso)
+                // Capa 4: MusicBrainz (más carátulas)
+                if (artL.length() > 0 && titL.length() > 0) urlsMusicBrainz(artL + " " + titL, urls);
+                else if (titL.length() > 0) urlsMusicBrainz(titL, urls);
+                // Capa 5: FOTO del artista (último recurso)
                 if (artL.length() > 0) urlsFotoArtista(artL, urls);
                 while (urls.size() > 12) urls.remove(urls.size() - 1);
                 final java.util.ArrayList<byte[]> bytesList = new java.util.ArrayList<byte[]>();
@@ -3039,11 +3089,34 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    private int videoPosGuardada = 0;
+    private boolean videoEstabaReproduciendo = false;
+    protected void onPause() {
+        super.onPause();
+        // Si hay un video reproduciéndose (ej. al poner reversa), guardar dónde va y pausarlo (para no reiniciarlo)
+        try {
+            View pv = findViewById(R.id.paneVideo);
+            if (pv != null && pv.getVisibility() == View.VISIBLE && videoView != null && videoView.isPlaying()) {
+                videoPosGuardada = videoView.getCurrentPosition();
+                videoEstabaReproduciendo = true;
+                videoView.pause();
+            }
+        } catch (Exception e) {}
+    }
     protected void onResume() {
         super.onResume();
         activo = this;
         // Registrar teclas del volante SIN pedir prioridad de audio (para no quitar el mute al volver de la cámara)
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
+        // Reanudar el video donde iba (al quitar la reversa), sin reiniciarlo
+        try {
+            View pv = findViewById(R.id.paneVideo);
+            if (videoEstabaReproduciendo && pv != null && pv.getVisibility() == View.VISIBLE && videoView != null) {
+                if (videoPosGuardada > 0) videoView.seekTo(videoPosGuardada);
+                videoView.start();
+            }
+            videoEstabaReproduciendo = false;
+        } catch (Exception e) {}
     }
     protected void onDestroy() {
         super.onDestroy();
