@@ -31,10 +31,8 @@ public class EqNombreView extends View {
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
-        float[] raw = new float[N];
-        float maxMag = 1f;
         for (int i = 0; i < N; i++) {
-            // Reparto LOGARÍTMICO: cada barra cubre una banda (graves->agudos), como un ecualizador real
+            // Reparto logarítmico: cada barra una banda (graves->agudos)
             int start = (int) Math.pow(bins, (float) i / N);
             int end = (int) Math.pow(bins, (float) (i + 1) / N);
             if (start < 1) start = 1;
@@ -48,21 +46,15 @@ public class EqNombreView extends View {
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            // Ganancia que SUBE con la frecuencia: los agudos tienen menos energía, así todas bailan
-            float gain = 1.0f + 3.2f * ((float) i / N);
-            mag *= gain;
-            raw[i] = mag;
-            if (mag > maxMag) maxMag = mag;
-        }
-        picoGlobal = Math.max(maxMag, picoGlobal * 0.92f);
-        if (picoGlobal < 6f) picoGlobal = 6f;
-        for (int i = 0; i < N; i++) {
-            float val = raw[i] / picoGlobal;
-            val = (float) (Math.log(1 + val * 9) / Math.log(10));
+            mag *= 1.0f + 1.3f * ((float) i / N);        // compensación SUAVE de agudos (no exagerada)
+            // ESCALA FIJA (sin auto-ganancia): quieto en lo suave, salta en lo fuerte
+            float val = mag / 68f;
+            val -= 0.10f;                                 // COMPUERTA: la voz/lo suave queda casi en cero
+            if (val < 0) val = 0;
+            val *= 1.35f;                                 // realce moderado de lo que sí suena
             if (val > 1f) val = 1f;
-            if (val < 0.02f) val = 0.02f;
-            if (val > target[i]) target[i] = val;                        // ataque: salta al instante
-            else target[i] = target[i] * 0.6f + val * 0.4f;              // caída ágil
+            if (val > target[i]) target[i] = val;         // ataque: salta al instante
+            else target[i] = target[i] * 0.55f + val * 0.45f;  // caída ágil
         }
         if (activo) postInvalidate();
     }
@@ -128,11 +120,11 @@ public class EqNombreView extends View {
             lastT = now;
             for (int i = 0; i < N; i++) target[i] = sonando ? (0.15f + rnd.nextFloat() * 0.85f) : 0.05f;
         }
-        if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.03f; }
+        if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
             if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;    // sube casi instantáneo
-            else h[i] += (target[i] - h[i]) * 0.45f;                     // baja ágil
-            float bh = h[i] * 32 * sc + 2;
+            else h[i] += (target[i] - h[i]) * 0.5f;                      // baja ágil
+            float bh = h[i] * 34 * sc + 1.5f;
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.55f, by + bh, pBar);
         }
         if (activo && sonando && !tieneAudio) postInvalidateDelayed(70);   // con FFT, se redibuja cuando llega audio

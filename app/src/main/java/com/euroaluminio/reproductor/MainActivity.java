@@ -127,9 +127,35 @@ public class MainActivity extends Activity {
     }
     // ---- Recibir canciones del celular por WiFi ----
     private ServidorWifi servidor;
+    private android.net.wifi.WifiManager.WifiLock wifiLock;
+    private android.os.PowerManager.WakeLock wakeWifi;
+    private void soltarCandadosWifi() {
+        try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception e) {}
+        try { if (wakeWifi != null && wakeWifi.isHeld()) wakeWifi.release(); } catch (Exception e) {}
+        wifiLock = null; wakeWifi = null;
+    }
+    private void tomarCandadosWifi() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            if (wm != null) {
+                int modo = android.net.wifi.WifiManager.WIFI_MODE_FULL;
+                try { modo = android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF; } catch (Throwable t) {}
+                wifiLock = wm.createWifiLock(modo, "SonidoJFV:wifi");
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();   // mantiene el WiFi despierto aunque manejes o se apague la pantalla
+            }
+        } catch (Exception e) {}
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            wakeWifi = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SonidoJFV:wifisrv");
+            wakeWifi.setReferenceCounted(false);
+            wakeWifi.acquire();
+        } catch (Exception e) {}
+    }
     private void alternarServidorWifi() {
         if (servidor != null && servidor.activo()) {
             servidor.detener(); servidor = null;
+            soltarCandadosWifi();
             Toast.makeText(this, "WiFi apagado", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -158,6 +184,7 @@ public class MainActivity extends Activity {
                 }
             });
             servidor.iniciar();
+            tomarCandadosWifi();   // mantener WiFi despierto hasta que se apague a mano
             final String url = "http://" + ip + ":" + servidor.puerto;
             float dens = getResources().getDisplayMetrics().density;
             android.widget.LinearLayout ly = new android.widget.LinearLayout(this);
@@ -191,6 +218,7 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "No se pudo iniciar: " + e.getMessage(), Toast.LENGTH_LONG).show();
             servidor = null;
+            soltarCandadosWifi();
         }
     }
     // Genera un código QR (sin internet) con la dirección para conectarse
@@ -489,6 +517,7 @@ public class MainActivity extends Activity {
                 if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista) { quitarDeListaActual(position); return true; }
                 if (modo == 1 && carpetaAbierta != null && !carpetaAbierta.esLista) { opcionesCancion(position); return true; }
                 if (modo == 0 && tab == 1) { opcionesLista(position); return true; }
+                if (modo == 0 && tab == 2) { opcionesVideo(position); return true; }
                 return false;
             }
         });
@@ -1831,18 +1860,23 @@ public class MainActivity extends Activity {
     }
     private void attachVisualizer() {
         try {
-            if (visualizer != null) { try { visualizer.release(); } catch (Exception e) {} visualizer = null; }
+            if (visualizer != null) {
+                try { visualizer.setEnabled(false); } catch (Exception e) {}
+                try { visualizer.release(); } catch (Exception e) {}
+                visualizer = null;
+            }
             if (mp == null) return;
             visualizer = new Visualizer(mp.getAudioSessionId());
             int[] rango = Visualizer.getCaptureSizeRange();
-            int cap = 512; if (cap < rango[0]) cap = rango[0]; if (cap > rango[1]) cap = rango[1];
-            visualizer.setCaptureSize(cap);   // más bins = más detalle (cada barra un instrumento)
+            int cap = 256; if (cap < rango[0]) cap = rango[0]; if (cap > rango[1]) cap = rango[1];
+            visualizer.setCaptureSize(cap);
+            int rate = (Visualizer.getMaxCaptureRate() * 3) / 4;
             visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
-                public void onWaveFormDataCapture(Visualizer v, byte[] wave, int rate) {}
-                public void onFftDataCapture(Visualizer v, byte[] data, int rate) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }
-            }, Visualizer.getMaxCaptureRate(), false, true);
+                public void onWaveFormDataCapture(Visualizer v, byte[] wave, int r) {}
+                public void onFftDataCapture(Visualizer v, byte[] data, int r) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }
+            }, rate, false, true);
             visualizer.setEnabled(true);
-        } catch (Throwable t) { visualizer = null; }  // en radios viejos puede fallar: usa animación por tiempo
+        } catch (Throwable t) { visualizer = null; }
     }
 
     private void aplicarTema() {
@@ -1972,7 +2006,14 @@ public class MainActivity extends Activity {
             mc.setAnchorView(videoView);
             videoView.setMediaController(mc);
             videoView.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener(){
-                public void onPrepared(android.media.MediaPlayer m){ try { m.start(); } catch (Exception e) {} }
+                public void onPrepared(android.media.MediaPlayer m){
+                    // Cortar la música JUSTO cuando el video va a empezar (evita que suenen los dos)
+                    try { if (mp != null && mp.isPlaying()) mp.pause(); } catch (Exception e) {}
+                    try { handler.removeCallbacks(actualizador); } catch (Exception e) {}
+                    try { if (am != null) am.abandonAudioFocus(focoListener); } catch (Exception e) {}
+                    pintarPlay(false);
+                    try { m.start(); } catch (Exception e) {}
+                }
             });
             videoView.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener(){
                 public boolean onError(android.media.MediaPlayer m, int a, int b){
@@ -1999,6 +2040,28 @@ public class MainActivity extends Activity {
         try { if (videoView != null) { videoView.stopPlayback(); } } catch (Exception e) {}
         View pane = findViewById(R.id.paneVideo);
         if (pane != null) pane.setVisibility(View.GONE);
+    }
+    // Menú al dejar presionado un video: eliminar del USB
+    private void opcionesVideo(final int position) {
+        if (position < 0 || position >= videos.size()) return;
+        final Song vid = videos.get(position);
+        new AlertDialog.Builder(this)
+            .setTitle("Eliminar video")
+            .setMessage("¿Borrar este video del USB?\n\n" + nombreDe(vid) + "\n\nEsto no se puede deshacer.")
+            .setPositiveButton("Eliminar", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) {
+                    boolean borrado = false;
+                    try { borrado = new File(vid.path).delete(); } catch (Exception e) {}
+                    if (borrado) {
+                        videos.remove(position);
+                        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                        actualizarHeaderLista();
+                        Toast.makeText(MainActivity.this, "Video eliminado", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "No se pudo borrar (¿USB de solo lectura?)", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }).setNegativeButton("Cancelar", null).show();
     }
 
     // Menú al dejar presionada una canción en una carpeta
@@ -2919,11 +2982,12 @@ public class MainActivity extends Activity {
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}
         try { if (volObserver != null) getContentResolver().unregisterContentObserver(volObserver); } catch (Exception e) {}
-        try { if (visualizer != null) visualizer.release(); } catch (Exception e) {}
+        try { if (visualizer != null) { try { visualizer.setEnabled(false); } catch (Exception e) {} visualizer.release(); } } catch (Exception e) {}
         try { if (vizBg != null) vizBg.parar(); } catch (Exception e) {}
         try { if (particles != null) particles.parar(); } catch (Exception e) {}
         try { if (mbCn != null) am.unregisterMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
         try { if (servidor != null) servidor.detener(); } catch (Exception e) {}
+        soltarCandadosWifi();
         try { if (videoView != null) videoView.stopPlayback(); } catch (Exception e) {}
         if (activo == this) activo = null;
         liberarWake();
