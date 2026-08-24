@@ -95,9 +95,18 @@ public class MainActivity extends Activity {
     private AudioManager am;
     private AudioManager.OnAudioFocusChangeListener focoListener = new AudioManager.OnAudioFocusChangeListener() {
         public void onAudioFocusChange(int f) {
-            if (f == AudioManager.AUDIOFOCUS_LOSS || f == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                try { if (mp != null && prepared && mp.isPlaying()) { mp.pause(); pintarPlay(false); } } catch (Exception e) {}
-            }
+            try {
+                if (f == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT || f == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+                    // Interrupción TEMPORAL (ej. cámara de reversa): bajar a 50% pero SEGUIR sonando (no pausar, no reiniciar)
+                    if (mp != null && prepared) { try { mp.setVolume(0.5f, 0.5f); } catch (Exception e) {} }
+                } else if (f == AudioManager.AUDIOFOCUS_GAIN) {
+                    // Recuperamos el audio: volver al volumen normal
+                    if (mp != null && prepared) { try { mp.setVolume(1f, 1f); } catch (Exception e) {} }
+                } else if (f == AudioManager.AUDIOFOCUS_LOSS) {
+                    // Pérdida permanente (otra app tomó el audio): sí pausar
+                    if (mp != null && prepared && mp.isPlaying()) { mp.pause(); pintarPlay(false); }
+                }
+            } catch (Exception e) {}
         }
     };
     // Instala Conscrypt (TLS moderno con BoringSSL, como Chrome/Poweramp) como proveedor #1.
@@ -297,6 +306,8 @@ public class MainActivity extends Activity {
     private int repeat = 0;
     private boolean prepared = false;
     private boolean noAutoStart = false;
+    private boolean yaRestaurado = false;   // para restaurar la última canción solo una vez al abrir
+    private int posGuardadaMs = 0;          // posición donde iba la última canción
     private int animDir = 0;   // 1 siguiente, -1 anterior, 0 sin animación
 
     private ImageView imgArt;
@@ -674,24 +685,7 @@ public class MainActivity extends Activity {
                             actualizarHeaderLista();
                             calcularPortadasCarpetas();
                             if (optAuto && hayInternet() && !carpetas.isEmpty()) descargarFaltantes();
-                            if (optResume) {
-                                String lp = prefs.getString("lastPath", null);
-                                if (lp != null) {
-                                    Song s = songPorRuta(lp);
-                                    if (s != null) {
-                                        for (Carpeta c : carpetas) {
-                                            int ix = c.songs.indexOf(s);
-                                            if (ix >= 0) {
-                                                songs.clear(); songs.addAll(c.songs); construirOrden();
-                                                posEnOrden = order.indexOf(ix); if (posEnOrden < 0) posEnOrden = 0;
-                                                noAutoStart = !optAutoplay;
-                                                cargarYReproducir();
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            restaurarUltima();
                         }
                     });
                 } finally {
@@ -1064,6 +1058,26 @@ public class MainActivity extends Activity {
         for (Carpeta c : carpetas) for (Song s : c.songs) if (s.path.equals(path)) return s;
         return null;
     }
+    // Restaura la última canción que sonaba (y su posición), lista para dar Play. Solo una vez al abrir.
+    private void restaurarUltima() {
+        if (yaRestaurado || !optResume) return;
+        String lp = prefs.getString("lastPath", null);
+        if (lp == null) return;
+        Song s = songPorRuta(lp);
+        if (s == null) return;   // el USB aún no está listo; se reintenta en el próximo escaneo
+        for (Carpeta c : carpetas) {
+            int ix = c.songs.indexOf(s);
+            if (ix >= 0) {
+                songs.clear(); songs.addAll(c.songs); construirOrden();
+                posEnOrden = order.indexOf(ix); if (posEnOrden < 0) posEnOrden = 0;
+                noAutoStart = !optAutoplay;              // cargar en pausa (lista para Play), salvo que auto-reproducir esté activo
+                posGuardadaMs = prefs.getInt("lastPos", 0);
+                yaRestaurado = true;
+                cargarYReproducir();
+                break;
+            }
+        }
+    }
     private void abrirLista(int pos) {
         if (pos < 0 || pos >= nombresListas.size()) return;
         String n = nombresListas.get(pos);
@@ -1240,6 +1254,7 @@ public class MainActivity extends Activity {
                     seek.setMax(m.getDuration());
                     txtDur.setText(fmt(m.getDuration()));
                     configurarEq();
+                    if (posGuardadaMs > 0) { try { m.seekTo(posGuardadaMs); seek.setProgress(posGuardadaMs); txtCur.setText(fmt(posGuardadaMs)); } catch (Exception e) {} posGuardadaMs = 0; }
                     if (noAutoStart) { noAutoStart = false; pintarPlay(false); }
                     else { pedirFoco(); m.start(); pintarPlay(true); handler.post(actualizador); }
                     attachVisualizer();
@@ -1289,11 +1304,14 @@ public class MainActivity extends Activity {
         cargarYReproducir();
     }
 
+    private int tickGuardar = 0;
     private final Runnable actualizador = new Runnable() {
         public void run() {
             if (mp != null && prepared && mp.isPlaying()) {
-                seek.setProgress(mp.getCurrentPosition());
-                txtCur.setText(fmt(mp.getCurrentPosition()));
+                int cp = mp.getCurrentPosition();
+                seek.setProgress(cp);
+                txtCur.setText(fmt(cp));
+                if (++tickGuardar >= 4) { tickGuardar = 0; try { prefs.edit().putInt("lastPos", cp).apply(); } catch (Exception e) {} }  // guardar dónde va cada ~2s
             }
             handler.postDelayed(this, 500);
         }
@@ -2436,6 +2454,30 @@ public class MainActivity extends Activity {
             }
         } catch (Exception e) {}
     }
+    // Tercera fuente: MusicBrainz (nombres) + Cover Art Archive (carátulas). Gratis y enorme.
+    private void sugMusicBrainz(String term, java.util.ArrayList<String[]> out) {
+        try {
+            String q = URLEncoder.encode(term, "UTF-8");
+            String json = httpGet("https://musicbrainz.org/ws/2/recording/?query=" + q + "&fmt=json&limit=6");
+            if (json == null) return;
+            org.json.JSONArray arr = new org.json.JSONObject(json).optJSONArray("recordings");
+            if (arr == null) return;
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject o = arr.getJSONObject(i);
+                String tit = o.optString("title", "");
+                String art = "";
+                org.json.JSONArray ac = o.optJSONArray("artist-credit");
+                if (ac != null && ac.length() > 0) art = ac.getJSONObject(0).optString("name", "");
+                String url = "";
+                org.json.JSONArray rel = o.optJSONArray("releases");
+                if (rel != null && rel.length() > 0) {
+                    String mbid = rel.getJSONObject(0).optString("id", "");
+                    if (mbid.length() > 0) url = "https://coverartarchive.org/release/" + mbid + "/front-250";
+                }
+                if (tit.length() > 0) out.add(new String[]{ tit, art, url });
+            }
+        } catch (Exception e) {}
+    }
     private void sugerirNombre(final Song s) {
         if (s == null) { Toast.makeText(this, "Pon una canción primero", Toast.LENGTH_SHORT).show(); return; }
         if (!hayInternet()) { Toast.makeText(this, "Necesitas internet para sugerir el nombre", Toast.LENGTH_SHORT).show(); return; }
@@ -2443,11 +2485,38 @@ public class MainActivity extends Activity {
         new Thread(new Runnable() {
             public void run() {
                 try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
-                String term = limpiarBusqueda(nombreDe(s));
+                // Armar artista y canción bien (prioriza el artista real)
+                String artista = (s.artist != null && !s.artist.equalsIgnoreCase("Desconocido")) ? s.artist.trim() : "";
+                String cancion = (s.title != null) ? s.title.trim() : "";
+                String base = nombreParaPartir(s);
+                if (artista.length() == 0 && base.indexOf("-") >= 0) {
+                    String[] pz = base.split("\\s*-\\s*");
+                    if (pz.length >= 2) { artista = pz[0].trim(); cancion = pz[pz.length - 1].trim(); }
+                }
+                if (cancion.length() == 0) cancion = base;
+                // Términos en orden de precisión: artista+canción primero
+                java.util.ArrayList<String> terms = new java.util.ArrayList<String>();
+                if (artista.length() > 0) terms.add(limpiarBusqueda(artista + " " + cancion));
+                terms.add(limpiarBusqueda(cancion));
+                if (!base.equalsIgnoreCase(cancion)) terms.add(limpiarBusqueda(base));
                 final java.util.ArrayList<String[]> items = new java.util.ArrayList<String[]>();
-                sugItunes(term, items);
-                sugDeezer(term, items);
-                while (items.size() > 8) items.remove(items.size() - 1);
+                for (int ti = 0; ti < terms.size() && items.size() < 12; ti++) {
+                    String term = terms.get(ti);
+                    if (term == null || term.length() == 0) continue;
+                    sugItunes(term, items);
+                    sugDeezer(term, items);
+                }
+                // Tercera fuente: MusicBrainz (con artista+canción)
+                sugMusicBrainz(artista.length() > 0 ? limpiarBusqueda(artista + " " + cancion) : limpiarBusqueda(cancion), items);
+                // Quitar duplicados (mismo título+artista)
+                java.util.HashSet<String> vistos = new java.util.HashSet<String>();
+                java.util.ArrayList<String[]> unicos = new java.util.ArrayList<String[]>();
+                for (int i = 0; i < items.size(); i++) {
+                    String clave = (items.get(i)[0] + "|" + items.get(i)[1]).toLowerCase();
+                    if (vistos.add(clave)) unicos.add(items.get(i));
+                }
+                items.clear(); items.addAll(unicos);
+                while (items.size() > 10) items.remove(items.size() - 1);
                 final java.util.ArrayList<android.graphics.Bitmap> thumbs = new java.util.ArrayList<android.graphics.Bitmap>();
                 for (int i = 0; i < items.size(); i++) {
                     byte[] b = bajarUrl(items.get(i)[2]);

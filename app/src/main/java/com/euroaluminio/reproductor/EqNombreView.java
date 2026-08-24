@@ -19,6 +19,7 @@ public class EqNombreView extends View {
     private static final int N = 30;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
+    private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -32,9 +33,10 @@ public class EqNombreView extends View {
         tieneAudio = true;
         int bins = fft.length / 2;
         for (int i = 0; i < N; i++) {
-            // Reparto logarítmico: cada barra una banda (graves->agudos)
-            int start = (int) Math.pow(bins, (float) i / N);
-            int end = (int) Math.pow(bins, (float) (i + 1) / N);
+            // Reparto logaritmico parejo (cada barra una banda distinta: graves -> agudos)
+            float fMin = 1f, fMax = bins - 1f;
+            int start = (int) (fMin * Math.pow(fMax / fMin, (float) i / N));
+            int end = (int) (fMin * Math.pow(fMax / fMin, (float) (i + 1) / N));
             if (start < 1) start = 1;
             if (end <= start) end = start + 1;
             if (end > bins) end = bins;
@@ -46,15 +48,16 @@ public class EqNombreView extends View {
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            mag *= 1.0f + 1.3f * ((float) i / N);        // compensación SUAVE de agudos (no exagerada)
-            // ESCALA FIJA (sin auto-ganancia): quieto en lo suave, salta en lo fuerte
-            float val = mag / 68f;
-            val -= 0.10f;                                 // COMPUERTA: la voz/lo suave queda casi en cero
-            if (val < 0) val = 0;
-            val *= 1.35f;                                 // realce moderado de lo que sí suena
+            // COMPUERTA: si esta banda casi no tiene energia, la barra baja (queda plana)
+            if (mag < 4.5f) { target[i] *= 0.5f; continue; }
+            // PICO POR BANDA: cada banda usa su propia altura -> cuando ESE instrumento suena, SU barra salta
+            pico[i] = Math.max(mag, pico[i] * 0.94f);
+            if (pico[i] < 9f) pico[i] = 9f;
+            float val = mag / pico[i];               // 0..1 relativo a esta banda
+            val = 0.18f + val * 0.82f;               // cuerpo: cuando suena, se ve con fuerza
             if (val > 1f) val = 1f;
-            if (val > target[i]) target[i] = val;         // ataque: salta al instante
-            else target[i] = target[i] * 0.55f + val * 0.45f;  // caída ágil
+            if (val > target[i]) target[i] = val;    // ataque: salta al instante
+            else target[i] = target[i] * 0.5f + val * 0.5f;   // caida agil
         }
         if (activo) postInvalidate();
     }
