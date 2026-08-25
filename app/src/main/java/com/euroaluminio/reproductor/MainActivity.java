@@ -3088,7 +3088,6 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    @Override
     private int videoPosGuardada = 0;
     private boolean videoEstabaReproduciendo = false;
     protected void onPause() {
