@@ -1,23 +1,38 @@
-plugins {
-    id 'com.android.application'
-}
+plugins { id 'com.android.application' }
 
 android {
-    namespace 'com.euroaluminio.reproductor'
+    namespace 'com.sistemadesglose.app'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.euroaluminio.reproductor"
-        minSdk 16
+        applicationId "com.sistemadesglose.app"
+        minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        // v100 FIX DEFINITIVO: usar timestamp Unix como versionCode.
+        // Un timestamp actual (~1.7 mil millones) SIEMPRE es mayor que cualquier
+        // versionCode que hayas tenido antes. Así, todo build nuevo se puede
+        // instalar encima sin problema — no más "versión más vieja".
+        versionCode ((int)(System.currentTimeMillis() / 1000))
+        versionName System.getenv("APK_BUILD_NUMBER") ? "1." + System.getenv("APK_BUILD_NUMBER") : "1.0"
+    }
+
+    signingConfigs {
+        jfv {
+            storeFile file("../desglose-key.jks")
+            storePassword "eurojfv2026"
+            keyAlias "jfv"
+            keyPassword "eurojfv2026"
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            shrinkResources false
+            signingConfig signingConfigs.jfv
+        }
+        debug {
+            signingConfig signingConfigs.jfv
         }
     }
 
@@ -27,10 +42,4 @@ android {
     }
 }
 
-dependencies {
-    // Seguridad TLS moderna dentro de la app (como hace Poweramp) para que el radio viejo
-    // pueda conectar a servidores actuales. Versión 2.1.0: reportada funcionando en Android 4.1-4.2 (API 16-17).
-    implementation 'org.conscrypt:conscrypt-android:2.1.0'
-    // Generar código QR sin internet (compatible con Android viejo)
-    implementation 'com.google.zxing:core:3.3.0'
-}
+dependencies { }
