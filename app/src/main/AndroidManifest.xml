@@ -2,83 +2,41 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.CAMERA" />
-    <!-- v089.10: Leer los contactos de la agenda del celular para importarlos al registro de clientes -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-sdk tools:overrideLibrary="org.conscrypt" />
 
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
+        android:usesCleartextTraffic="true"
+        android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"
-            android:windowSoftInputMode="adjustResize">
-
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-            <!-- Abrir el HTML directo desde WhatsApp / Archivos -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" android:mimeType="text/html" />
-                <data android:scheme="file" android:mimeType="text/html" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" android:mimeType="application/octet-stream" />
-                <data android:scheme="content" android:mimeType="application/x-html" />
-                <data android:scheme="content" android:mimeType="text/plain" />
-                <data android:scheme="content" android:mimeType="application/json" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.html" />
-                <data android:scheme="content" android:host="*" android:pathPattern=".*\\.html" />
-                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.json" />
-                <data android:scheme="content" android:host="*" android:pathPattern=".*\\.json" />
-            </intent-filter>
-
-            <!-- Compartir el HTML o los precios hacia esta app -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/html" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/json" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <provider
-            android:name=".AppFileProvider"
-            android:authorities="com.sistemadesglose.app.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true" />
+        <receiver android:name=".MediaButtonReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

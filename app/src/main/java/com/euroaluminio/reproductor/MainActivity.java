@@ -161,6 +161,16 @@ public class MainActivity extends Activity {
             wakeWifi.acquire();
         } catch (Exception e) {}
     }
+    // Abre la pagina OFICIAL de YouTube en el navegador del radio (legal, sin apps raras)
+    private void abrirYouTube() {
+        try {
+            android.content.Intent it = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://m.youtube.com"));
+            it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(it);
+        } catch (Exception e) {
+            Toast.makeText(this, "Este radio no tiene navegador para abrir YouTube", Toast.LENGTH_LONG).show();
+        }
+    }
     private void alternarServidorWifi() {
         if (servidor != null && servidor.activo()) {
             servidor.detener(); servidor = null;
@@ -453,6 +463,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnDesvincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ carpetaVinculada=null; prefs.edit().remove("carpetaVinc").apply(); pintarAjustes(); escanearMusica(); }});
         findViewById(R.id.btnDescargarArt).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ descargarFaltantes(); }});
         findViewById(R.id.btnWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ alternarServidorWifi(); }});
+        findViewById(R.id.btnYouTube).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirYouTube(); }});
         findViewById(R.id.btnCancelarExplorar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
         findViewById(R.id.btnUsarCarpeta).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ usarCarpeta(); }});
 

@@ -274,7 +274,7 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="46dp"
                 android:text="&lt; Reproduciendo" android:textColor="@color/text" android:textSize="15sp" android:background="@color/surface"/>
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:layout_marginLeft="12dp" android:text="Ajustes · v111" android:textColor="@color/muted" android:textSize="15sp"/>
+                android:layout_marginLeft="12dp" android:text="Ajustes · v112" android:textColor="@color/muted" android:textSize="15sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
@@ -378,6 +378,13 @@
                     android:text="Recibir música y videos por WiFi" android:textColor="@color/accent" android:textStyle="bold" android:background="@color/surface2"/>
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:text="Abre una página para enviar música o videos desde el celular a la carpeta Descarga." android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="6dp"/>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#22FFFFFF" android:layout_marginTop="12dp" android:layout_marginBottom="12dp"/>
+
+                <Button android:id="@+id/btnYouTube" android:layout_width="match_parent" android:layout_height="52dp"
+                    android:text="Abrir YouTube (página oficial)" android:textColor="#FFFFFF" android:textStyle="bold" android:background="#E01F1F"/>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="Abre la página oficial de YouTube (m.youtube.com) en el navegador del radio para buscar y ver videos." android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="6dp"/>
             </LinearLayout>
         </ScrollView>
     </LinearLayout>
