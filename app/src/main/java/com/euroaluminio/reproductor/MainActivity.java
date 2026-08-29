@@ -980,6 +980,12 @@ public class MainActivity extends Activity {
                         if (eqNombre != null) eqNombre.setInfo(s.artist != null && s.artist.length() > 0 ? s.artist : "", s.title);
                         portadaActualBmp = portada;
                         if (discoView != null) discoView.setCover(portada);   // portada al centro del disco (null = disco genérico)
+                        // si estamos en modo Disco, rearmar el disco con la caratula NITIDA recien cargada (evita centro opaco/viejo)
+                        if (efectoModo == 6 && discoImg != null) {
+                            discoBmpCache = null; discoCacheKey = null;
+                            android.graphics.Bitmap nb = obtenerDiscoBitmap(portadaActualBmp);
+                            if (nb != null) discoImg.setImageBitmap(nb);
+                        }
                         if (portada != null) {
                             imgArt.setImageBitmap(portada);
                             if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
