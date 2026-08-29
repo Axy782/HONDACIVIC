@@ -378,6 +378,17 @@ public class MainActivity extends Activity {
     private VisualizerView vizBg = null;
     private EqNombreView eqNombre = null;
     private DiscoView discoView = null;
+    // ---- Letras ----
+    private android.widget.TextView letrasTexto = null, letrasAviso = null, letraOffLbl = null;
+    private android.view.View letrasDim = null, letraCtrl = null;
+    private java.util.ArrayList<Long> letraTiempos = new java.util.ArrayList<Long>();
+    private java.util.ArrayList<String> letraLineas = new java.util.ArrayList<String>();
+    private boolean letraSync = false;
+    private String letraPlain = null;
+    private double letraOffset = 0;
+    private String letraSongPath = null;
+    private int letraUltimaIdx = -2;
+    private Object letraLock = new Object();
     private Bitmap portadaActualBmp = null;
     private ParticlesView particles = null;
     private boolean efectosOn = true;
@@ -449,7 +460,7 @@ public class MainActivity extends Activity {
         optVolArranque = prefs.getBoolean("volArranque2", false);
         efectosOn = prefs.getBoolean("efectos", true);
         efectoModo = prefs.getInt("efectoModo2", 5);
-        if (efectoModo != 4 && efectoModo != 5 && efectoModo != 6) efectoModo = 5;   // 3 efectos permitidos
+        if (efectoModo != 4 && efectoModo != 5 && efectoModo != 6 && efectoModo != 7) efectoModo = 5;   // 4 efectos permitidos
 
         aplicarTema();
 
@@ -530,17 +541,18 @@ public class MainActivity extends Activity {
         if (vizBg != null) { vizBg.setTipo(1); vizBg.setColor(accent); }
         eqNombre = (EqNombreView) findViewById(R.id.eqNombre);
         if (eqNombre != null) eqNombre.setColor(0xFFFFC107);
-        discoView = (DiscoView) findViewById(R.id.discoView);
+
         particles = (ParticlesView) findViewById(R.id.particulas);
         if (particles != null) particles.setColor(accent);
         findViewById(R.id.btnVis).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            // 3 efectos: 5=Ecualizador, 6=Disco girando, 4=Sin efectos
+            // 4 efectos: 5=Ecualizador, 6=Disco girando, 7=Letras, 4=Sin efectos
             if (efectoModo == 5) efectoModo = 6;
-            else if (efectoModo == 6) efectoModo = 4;
+            else if (efectoModo == 6) efectoModo = 7;
+            else if (efectoModo == 7) efectoModo = 4;
             else efectoModo = 5;
             prefs.edit().putInt("efectoModo2", efectoModo).apply();
             aplicarEfectos();
-            String txt = (efectoModo == 6) ? "Disco girando" : (efectoModo == 4 ? "Sin efectos" : "Ecualizador con carátula");
+            String txt = (efectoModo == 6) ? "Disco girando" : (efectoModo == 7 ? "Letras" : (efectoModo == 4 ? "Sin efectos" : "Ecualizador con carátula"));
             Toast.makeText(MainActivity.this, txt, Toast.LENGTH_SHORT).show();
         }});
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
@@ -1335,6 +1347,7 @@ public class MainActivity extends Activity {
                 txtCur.setText(fmt(cp));
                 if (++tickGuardar >= 4) { tickGuardar = 0; try { prefs.edit().putInt("lastPos", cp).apply(); } catch (Exception e) {} }  // guardar dónde va cada ~2s
             }
+            try { if (efectoModo == 7) actualizarLetraLinea(); } catch (Exception e) {}
             handler.postDelayed(this, 500);
         }
     };
@@ -1903,7 +1916,215 @@ public class MainActivity extends Activity {
                 discoView.setSonando(sonando);
                 discoView.setActivo(discoOn);
             }
+            // Efecto Letras (modo 7)
+            boolean letrasOn = (efectoModo == 7);
+            if (letrasTexto != null) letrasTexto.setVisibility(letrasOn ? View.VISIBLE : View.GONE);
+            if (letrasDim != null) letrasDim.setVisibility(letrasOn ? View.VISIBLE : View.GONE);
+            if (letraCtrl != null) letraCtrl.setVisibility(letrasOn ? View.VISIBLE : View.GONE);
+            if (!letrasOn && letrasAviso != null) letrasAviso.setVisibility(View.GONE);
+            if (letrasOn) {
+                Song s = cancionActual();
+                if (s != null && (letraSongPath == null || !letraSongPath.equals(s.path))) cargarLetrasDe(s);
+            }
         } catch (Exception e) {}
+    }
+    // ===== LETRAS (karaoke) =====
+    private void ajustarLetraOffset(double d){
+        letraOffset = Math.round((letraOffset + d) * 10.0) / 10.0;
+        if (letraOffLbl != null) letraOffLbl.setText((letraOffset>0?"+":"") + String.format(java.util.Locale.US,"%.1f",letraOffset) + "s");
+        letraUltimaIdx = -2;
+        guardarOffsetEnUsb();
+    }
+    private String baseLetra(Song s){
+        String n = (s.title != null && s.title.length()>0) ? s.title : (s.path!=null? new java.io.File(s.path).getName() : "song");
+        String art = (s.artist != null && !s.artist.equals("Desconocido")) ? s.artist : "";
+        String base = (art.length()>0 ? art + " - " : "") + n;
+        return base.replaceAll("[\\\\/:*?\"<>|]", " ").replaceAll("\\s+", " ").trim();
+    }
+    private java.io.File archivoLrc(Song s){
+        if (s == null || s.path == null) return null;
+        java.io.File f = new java.io.File(s.path);
+        java.io.File dir = f.getParentFile();
+        if (dir == null) return null;
+        String nom = f.getName();
+        int p = nom.lastIndexOf('.'); if (p>0) nom = nom.substring(0,p);
+        return new java.io.File(dir, nom + ".lrc");
+    }
+    private double leerOffsetLRC(String txt){
+        try { java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\s*\\]", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(txt);
+            if (m.find()) return Integer.parseInt(m.group(1))/1000.0; } catch (Exception e) {}
+        return 0;
+    }
+    private void parseLetra(String txt){
+        synchronized (letraLock){
+            letraTiempos.clear(); letraLineas.clear(); letraSync=false; letraPlain=null;
+            if (txt == null){ return; }
+            if (txt.startsWith("PLAIN\n")){ letraPlain = txt.substring(6); return; }
+            java.util.regex.Pattern pt = java.util.regex.Pattern.compile("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\]");
+            String[] ls = txt.split("\\r?\\n");
+            java.util.ArrayList<long[]> tmp = new java.util.ArrayList<long[]>();
+            java.util.ArrayList<String> tmpTxt = new java.util.ArrayList<String>();
+            for (String l : ls){
+                java.util.regex.Matcher m = pt.matcher(l);
+                java.util.ArrayList<Long> ts = new java.util.ArrayList<Long>();
+                while (m.find()){ long mm = Long.parseLong(m.group(1)); double ss = Double.parseDouble(m.group(2)); ts.add((long)((mm*60+ss)*1000)); }
+                String texto = l.replaceAll("\\[[^\\]]*\\]", "").trim();
+                for (Long tt : ts){ tmp.add(new long[]{tt}); tmpTxt.add(texto); }
+            }
+            // ordenar por tiempo
+            Integer[] idx = new Integer[tmp.size()];
+            for (int i=0;i<idx.length;i++) idx[i]=i;
+            final java.util.ArrayList<long[]> ftmp = tmp;
+            java.util.Arrays.sort(idx, new java.util.Comparator<Integer>(){ public int compare(Integer a, Integer b){ return Long.valueOf(ftmp.get(a)[0]).compareTo(ftmp.get(b)[0]); } });
+            for (int i=0;i<idx.length;i++){ letraTiempos.add(tmp.get(idx[i])[0]); letraLineas.add(tmpTxt.get(idx[i])); }
+            letraSync = letraTiempos.size() > 0;
+            if (!letraSync) letraPlain = txt;
+        }
+    }
+    private void mostrarAvisoLetra(final String msg){
+        runOnUiThread(new Runnable(){ public void run(){
+            if (letrasAviso == null) return;
+            if (msg == null || msg.length()==0){ letrasAviso.setVisibility(View.GONE); }
+            else { letrasAviso.setText(msg); letrasAviso.setVisibility(View.VISIBLE); }
+        }});
+    }
+    private void cargarLetrasDe(final Song s){
+        if (s == null) return;
+        letraSongPath = s.path;
+        synchronized (letraLock){ letraTiempos.clear(); letraLineas.clear(); letraSync=false; letraPlain=null; }
+        letraOffset = 0; letraUltimaIdx = -2;
+        if (letrasTexto != null) letrasTexto.setText("");
+        mostrarAvisoLetra("");
+        new Thread(new Runnable(){ public void run(){
+            String txt = null;
+            // 1) archivo .lrc en el USB (offline)
+            try { java.io.File lf = archivoLrc(s);
+                if (lf != null && lf.exists()){ txt = leerArchivoTexto(lf); }
+            } catch (Exception e) {}
+            // 2) bajar de internet
+            if (txt == null){
+                if (!hayInternet()){ mostrarAvisoLetra("Sin conexion: no se pudo bajar la letra"); return; }
+                runOnUiThread(new Runnable(){ public void run(){ if (letrasTexto!=null) letrasTexto.setText("Bajando letra..."); }});
+                txt = bajarLetra(s);
+                if (txt != null && !txt.startsWith("PLAIN\n")){ try { java.io.File lf=archivoLrc(s); if(lf!=null) escribirArchivoTexto(lf, txt); } catch (Exception e) {} }
+            }
+            if (txt == null){ mostrarAvisoLetra(hayInternet()? "No se encontro la letra de esta cancion" : "Sin conexion: no se pudo bajar la letra"); runOnUiThread(new Runnable(){ public void run(){ if(letrasTexto!=null) letrasTexto.setText(""); }}); return; }
+            final double off = leerOffsetLRC(txt);
+            parseLetra(txt);
+            final boolean sync = letraSync;
+            runOnUiThread(new Runnable(){ public void run(){
+                letraOffset = off;
+                if (letraOffLbl != null) letraOffLbl.setText((letraOffset>0?"+":"") + String.format(java.util.Locale.US,"%.1f",letraOffset) + "s");
+                mostrarAvisoLetra(sync ? "" : "Letra sin sincronia (avanza por tiempo)");
+                letraUltimaIdx = -2;
+            }});
+        }}).start();
+    }
+    private String bajarLetra(Song s){
+        try {
+            String art = (s.artist != null && !s.artist.equals("Desconocido")) ? s.artist : "";
+            String son = (s.title != null && s.title.length()>0) ? s.title : (s.path!=null? new java.io.File(s.path).getName().replaceAll("\\.[a-zA-Z0-9]{2,4}$","") : "");
+            int dur = 0; try { if (mp != null && prepared) dur = mp.getDuration()/1000; } catch (Exception e) {}
+            String u = "https://lrclib.net/api/get?artist_name=" + java.net.URLEncoder.encode(art,"UTF-8") + "&track_name=" + java.net.URLEncoder.encode(son,"UTF-8");
+            if (dur > 0) u += "&duration=" + dur;
+            String j = httpGet(u);
+            if (j != null){
+                String sy = extraerJson(j, "syncedLyrics"); if (sy != null && sy.length()>0) return desescapar(sy);
+                String pl = extraerJson(j, "plainLyrics"); if (pl != null && pl.length()>0) return "PLAIN\n" + desescapar(pl);
+            }
+            // búsqueda
+            String j2 = httpGet("https://lrclib.net/api/search?q=" + java.net.URLEncoder.encode((art+" "+son).trim(),"UTF-8"));
+            if (j2 != null){
+                String sy = extraerJson(j2, "syncedLyrics"); if (sy != null && sy.length()>0) return desescapar(sy);
+                String pl = extraerJson(j2, "plainLyrics"); if (pl != null && pl.length()>0) return "PLAIN\n" + desescapar(pl);
+            }
+        } catch (Exception e) {}
+        return null;
+    }
+    private String extraerJson(String json, String campo){
+        try {
+            String key = "\"" + campo + "\":";
+            int p = json.indexOf(key); if (p < 0) return null;
+            int i = p + key.length();
+            while (i < json.length() && (json.charAt(i)==' '||json.charAt(i)=='\n'||json.charAt(i)=='\r')) i++;
+            if (i >= json.length() || json.charAt(i) != '"') return null;
+            i++; StringBuilder sb = new StringBuilder();
+            while (i < json.length()){ char c = json.charAt(i);
+                if (c == '\\' && i+1 < json.length()){ sb.append(c); sb.append(json.charAt(i+1)); i+=2; continue; }
+                if (c == '"') break;
+                sb.append(c); i++;
+            }
+            return sb.toString();
+        } catch (Exception e) { return null; }
+    }
+    private String desescapar(String s){
+        if (s == null) return null;
+        return s.replace("\\n","\n").replace("\\r","").replace("\\\"","\"").replace("\\/","/").replace("\\\\","\\");
+    }
+    private void guardarOffsetEnUsb(){
+        final Song s = cancionActual();
+        new Thread(new Runnable(){ public void run(){
+            try {
+                java.io.File lf = archivoLrc(s); if (lf == null || !lf.exists()) return;
+                String cuerpo = leerArchivoTexto(lf);
+                if (cuerpo == null) return;
+                cuerpo = cuerpo.replaceAll("(?i)^\\s*\\[offset:[^\\]]*\\]\\s*\\r?\\n?", "");
+                int ms = (int)Math.round(letraOffset*1000);
+                String nuevo = "[offset:" + (ms>=0?"+":"") + ms + "]\n" + cuerpo;
+                escribirArchivoTexto(lf, nuevo);
+            } catch (Exception e) {}
+        }}).start();
+    }
+    private String leerArchivoTexto(java.io.File f){
+        try {
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096]; int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            in.close();
+            return new String(bo.toByteArray(), "UTF-8");
+        } catch (Exception e) { return null; }
+    }
+    private void escribirArchivoTexto(java.io.File f, String txt){
+        try {
+            java.io.FileOutputStream o = new java.io.FileOutputStream(f);
+            o.write(txt.getBytes("UTF-8")); o.close();
+        } catch (Exception e) {}
+    }
+    private boolean hayInternet(){
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
+            return ni != null && ni.isConnected();
+        } catch (Exception e) { return true; }
+    }
+    private void actualizarLetraLinea(){
+        if (efectoModo != 7 || letrasTexto == null) return;
+        int pos = 0; try { if (mp != null && prepared) pos = mp.getCurrentPosition(); } catch (Exception e) {}
+        String linea = ""; int cur = -1;
+        synchronized (letraLock){
+            if (letraSync && letraTiempos.size() > 0){
+                long t = (long)(pos + letraOffset*1000 + 200);
+                for (int k=0;k<letraTiempos.size();k++){ if (letraTiempos.get(k) <= t) cur = k; else break; }
+                if (cur >= 0 && cur < letraLineas.size()) linea = letraLineas.get(cur);
+            } else if (letraPlain != null){
+                String[] ls = letraPlain.split("\\n");
+                java.util.ArrayList<String> vis = new java.util.ArrayList<String>();
+                for (String x : ls){ if (x.trim().length()>0) vis.add(x); }
+                if (vis.size() > 0){
+                    int dur = 200000; try { if (mp!=null&&prepared) dur = mp.getDuration(); } catch (Exception e) {}
+                    if (dur <= 0) dur = 200000;
+                    double p2 = (pos + letraOffset*1000) / (double)dur;
+                    cur = (int)Math.floor(p2 * vis.size());
+                    if (cur < 0) cur = 0; if (cur >= vis.size()) cur = vis.size()-1;
+                    linea = vis.get(cur);
+                }
+            }
+        }
+        if (cur == letraUltimaIdx) return;
+        letraUltimaIdx = cur;
+        final String fl = linea.toUpperCase();
+        runOnUiThread(new Runnable(){ public void run(){ if (letrasTexto != null) letrasTexto.setText(fl); }});
     }
     private void attachVisualizer() {
         try {
