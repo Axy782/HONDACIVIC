@@ -2013,33 +2013,72 @@ public class MainActivity extends Activity {
             parseLetra(txt);
             final boolean sync = letraSync;
             runOnUiThread(new Runnable(){ public void run(){
-                letraOffset = off;
-                if (letraOffLbl != null) letraOffLbl.setText((letraOffset>0?"+":"") + String.format(java.util.Locale.US,"%.1f",letraOffset) + "s");
-                mostrarAvisoLetra(sync ? "" : "Letra sin sincronia (avanza por tiempo)");
+                if (sync){
+                    letraOffset = off;
+                    if (letraOffLbl != null) letraOffLbl.setText((letraOffset>0?"+":"") + String.format(java.util.Locale.US,"%.1f",letraOffset) + "s");
+                    mostrarAvisoLetra("");
+                } else {
+                    synchronized (letraLock){ letraTiempos.clear(); letraLineas.clear(); letraPlain=null; letraSync=false; }
+                    if (letrasTexto != null) letrasTexto.setText("");
+                    mostrarAvisoLetra("No hay letra sincronizada para esta cancion");
+                }
                 letraUltimaIdx = -2;
             }});
         }}).start();
+    }
+    private String enc(String s){ try { return java.net.URLEncoder.encode(s==null?"":s,"UTF-8"); } catch (Exception e) { return ""; } }
+    private String limpiarParaLetra(String s){
+        if (s == null) return "";
+        s = s.replaceAll("\\([^)]*\\)", " ").replaceAll("\\[[^\\]]*\\]", " ");
+        s = s.replaceAll("(?i)\\b(feat|ft|featuring)\\b.*", " ");
+        s = s.replaceAll("(?i)\\b(remix|remastered|remaster|official|video|audio|lyrics|letra|hd|hq|4k|en vivo|live|version)\\b", " ");
+        s = s.replaceAll("\\s+", " ").trim();
+        return s;
+    }
+    // devuelve la PRIMERA syncedLyrics NO nula (sirve para /get y /search)
+    private String syncedDeJson(String json){
+        if (json == null) return null;
+        int from = 0; String key = "\"syncedLyrics\":";
+        while (true){
+            int p = json.indexOf(key, from); if (p < 0) return null;
+            int i = p + key.length();
+            while (i < json.length() && (json.charAt(i)==' '||json.charAt(i)=='\n'||json.charAt(i)=='\r'||json.charAt(i)=='\t')) i++;
+            if (i < json.length() && json.charAt(i) == '"'){
+                i++; StringBuilder sb = new StringBuilder();
+                while (i < json.length()){ char c = json.charAt(i);
+                    if (c == '\\' && i+1 < json.length()){ sb.append(c); sb.append(json.charAt(i+1)); i+=2; continue; }
+                    if (c == '"') break; sb.append(c); i++;
+                }
+                String val = sb.toString();
+                if (val.length() > 0) return desescapar(val);
+            }
+            from = p + key.length();
+        }
+    }
+    private String getSync(String art, String son, int dur){
+        try { String u = "https://lrclib.net/api/get?artist_name=" + enc(art) + "&track_name=" + enc(son);
+            if (dur > 0) u += "&duration=" + dur;
+            return syncedDeJson(httpGet(u));
+        } catch (Exception e) { return null; }
+    }
+    private String searchSync(String q){
+        try { return syncedDeJson(httpGet("https://lrclib.net/api/search?q=" + enc(q))); } catch (Exception e) { return null; }
     }
     private String bajarLetra(Song s){
         try {
             String art = (s.artist != null && !s.artist.equals("Desconocido")) ? s.artist : "";
             String son = (s.title != null && s.title.length()>0) ? s.title : (s.path!=null? new java.io.File(s.path).getName().replaceAll("\\.[a-zA-Z0-9]{2,4}$","") : "");
             int dur = 0; try { if (mp != null && prepared) dur = mp.getDuration()/1000; } catch (Exception e) {}
-            String u = "https://lrclib.net/api/get?artist_name=" + java.net.URLEncoder.encode(art,"UTF-8") + "&track_name=" + java.net.URLEncoder.encode(son,"UTF-8");
-            if (dur > 0) u += "&duration=" + dur;
-            String j = httpGet(u);
-            if (j != null){
-                String sy = extraerJson(j, "syncedLyrics"); if (sy != null && sy.length()>0) return desescapar(sy);
-                String pl = extraerJson(j, "plainLyrics"); if (pl != null && pl.length()>0) return "PLAIN\n" + desescapar(pl);
-            }
-            // búsqueda
-            String j2 = httpGet("https://lrclib.net/api/search?q=" + java.net.URLEncoder.encode((art+" "+son).trim(),"UTF-8"));
-            if (j2 != null){
-                String sy = extraerJson(j2, "syncedLyrics"); if (sy != null && sy.length()>0) return desescapar(sy);
-                String pl = extraerJson(j2, "plainLyrics"); if (pl != null && pl.length()>0) return "PLAIN\n" + desescapar(pl);
-            }
+            String artL = limpiarParaLetra(art), sonL = limpiarParaLetra(son);
+            String r;
+            r = getSync(art, son, dur); if (r != null) return r;
+            if (dur > 0){ r = getSync(art, son, 0); if (r != null) return r; }
+            if (!artL.equals(art) || !sonL.equals(son)){ r = getSync(artL, sonL, 0); if (r != null) return r; }
+            r = searchSync((art + " " + son).trim()); if (r != null) return r;
+            r = searchSync((artL + " " + sonL).trim()); if (r != null) return r;
+            r = searchSync(sonL.length()>0 ? sonL : son); if (r != null) return r;
         } catch (Exception e) {}
-        return null;
+        return null;   // SOLO sincronizadas: si no hay, null
     }
     private String extraerJson(String json, String campo){
         try {
@@ -2090,13 +2129,6 @@ public class MainActivity extends Activity {
             java.io.FileOutputStream o = new java.io.FileOutputStream(f);
             o.write(txt.getBytes("UTF-8")); o.close();
         } catch (Exception e) {}
-    }
-    private boolean hayInternet(){
-        try {
-            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-            android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
-            return ni != null && ni.isConnected();
-        } catch (Exception e) { return true; }
     }
     private void actualizarLetraLinea(){
         if (efectoModo != 7 || letrasTexto == null) return;
