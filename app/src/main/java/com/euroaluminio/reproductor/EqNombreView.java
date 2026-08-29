@@ -119,12 +119,13 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.8f;     // sube rápido
-            else h[i] += (target[i] - h[i]) * 0.28f;                     // baja suave (natural)
-            float bh = h[i] * 34 * sc + 1.5f;
-            cv.drawRect(bx + i * step, by, bx + i * step + step * 0.55f, by + bh, pBar);
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.9f;      // sube al instante
+            else h[i] += (target[i] - h[i]) * 0.45f;                      // baja ágil (más rápido, como PC)
+            float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
+            cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
-        if (activo && sonando && !tieneAudio) postInvalidateDelayed(70);   // con FFT, se redibuja cuando llega audio
+        // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento
+        if (activo && sonando) postInvalidateDelayed(33);
     }
 
     private String upper(String s) { try { return s.toUpperCase(); } catch (Exception e) { return s; } }

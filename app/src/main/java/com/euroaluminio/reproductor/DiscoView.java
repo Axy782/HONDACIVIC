@@ -46,7 +46,7 @@ public class DiscoView extends View {
             cv.drawArc(new RectF(cx - r * 0.8f, cy - r * 0.8f, cx + r * 0.8f, cy + r * 0.8f), -60, 50, false, p);
             // Label central con la carátula
             float lr = r * 0.34f;
-            if (coverActual != null) {
+            if (coverActual != null && !coverActual.isRecycled()) {
                 Path path = new Path(); path.addCircle(cx, cy, lr, Path.Direction.CW);
                 cv.save(); cv.clipPath(path);
                 Rect src = new Rect(0, 0, coverActual.getWidth(), coverActual.getHeight());
@@ -76,19 +76,26 @@ public class DiscoView extends View {
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
         int disco = (int) (Math.min(w, h) * 0.86f);   // tamaño del disco
+        if (disco < 20) return;
         if (discoBmp == null || lastSize != disco) { lastSize = disco; construirDisco(disco); }
-        if (discoBmp == null) return;
-        // Colocar el disco a la IZQUIERDA-centro (deja la derecha para el nombre + ecualizador)
         float cx = h * 0.52f;
         float cy = h * 0.5f;
-        canvas.save();
-        canvas.rotate(angulo, cx, cy);
-        canvas.drawBitmap(discoBmp, cx - disco / 2f, cy - disco / 2f, p);
-        canvas.restore();
-        if (sonando) {
-            angulo += 1.1f;                 // velocidad de giro
-            if (angulo >= 360f) angulo -= 360f;
-            postInvalidateDelayed(33);      // ~30 cuadros por segundo (fluido y liviano)
+        if (discoBmp != null) {
+            canvas.save();
+            canvas.rotate(angulo, cx, cy);
+            canvas.drawBitmap(discoBmp, cx - disco / 2f, cy - disco / 2f, p);
+            canvas.restore();
+        } else {
+            // respaldo: si no se pudo armar el bitmap, dibujar un disco simple para que SIEMPRE se vea algo
+            float r = disco / 2f;
+            p.setStyle(Paint.Style.FILL); p.setColor(0xFF0B0B0D);
+            canvas.drawCircle(cx, cy, r, p);
+            p.setColor(0xFFC0392B); canvas.drawCircle(cx, cy, r * 0.34f, p);
+            p.setColor(0xFF141118); canvas.drawCircle(cx, cy, disco * 0.03f, p);
+        }
+        if (activo) {
+            if (sonando) { angulo += 1.1f; if (angulo >= 360f) angulo -= 360f; }
+            postInvalidateDelayed(33);      // redibujo continuo mientras esté activo (aparece aunque esté en pausa)
         }
     }
 }
