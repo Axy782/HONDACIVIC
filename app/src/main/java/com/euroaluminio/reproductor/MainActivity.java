@@ -376,6 +376,12 @@ public class MainActivity extends Activity {
     private android.database.ContentObserver volObserver = null;
     private boolean descargaEnCurso = false;
     private VisualizerView vizBg = null;
+    private EqNombreView eqNombre = null;
+    private DiscoView discoView = null;
+    private android.widget.ImageView discoImg = null;
+    private android.graphics.Bitmap discoBmpCache = null;
+    private String discoCacheKey = null;
+    private boolean discoAnimando = false;
 
     // ---- Letras ----
     private android.widget.TextView letrasTexto = null, letrasAviso = null, letraOffLbl = null;
