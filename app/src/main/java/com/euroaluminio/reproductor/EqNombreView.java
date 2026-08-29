@@ -16,7 +16,7 @@ public class EqNombreView extends View {
     private String artista = "", cancion = "";
     private int color = 0xFFFFC107;      // amarillo como el video
     private boolean activo = false, sonando = false;
-    private static final int N = 30;
+    private static final int N = 40;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
@@ -32,32 +32,26 @@ public class EqNombreView extends View {
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
+        int usable = (int) (bins * 0.9f);
         for (int i = 0; i < N; i++) {
-            // Reparto logaritmico parejo (cada barra una banda distinta: graves -> agudos)
-            float fMin = 1f, fMax = bins - 1f;
-            int start = (int) (fMin * Math.pow(fMax / fMin, (float) i / N));
-            int end = (int) (fMin * Math.pow(fMax / fMin, (float) (i + 1) / N));
-            if (start < 1) start = 1;
-            if (end <= start) end = start + 1;
-            if (end > bins) end = bins;
+            // reparto PAREJO por bandas (promedio real, igual que en PC)
+            int lo = i * usable / N + 1;
+            int hi = (i + 1) * usable / N + 1;
+            if (hi <= lo) hi = lo + 1;
+            if (hi > bins) hi = bins;
             float sum = 0; int cnt = 0;
-            for (int b = start; b < end; b++) {
+            for (int b = lo; b < hi; b++) {
                 int p = b * 2;
                 if (p + 1 >= fft.length) break;
                 float re = fft[p], im = fft[p + 1];
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            // COMPUERTA: si esta banda casi no tiene energia, la barra baja (queda plana)
-            if (mag < 3.5f) { target[i] *= 0.55f; continue; }
-            // PICO POR BANDA: cada banda usa su propia altura -> cuando ESE instrumento suena, SU barra salta
-            pico[i] = Math.max(mag, pico[i] * 0.96f);
-            if (pico[i] < 9f) pico[i] = 9f;
-            float val = mag / pico[i];               // 0..1 relativo a esta banda
-            val = 0.12f + val * 0.88f;               // cuerpo: cuando suena, se ve con fuerza
-            if (val > 1f) val = 1f;
-            if (val > target[i]) target[i] = val;    // ataque: salta al instante
-            else target[i] = target[i] * 0.62f + val * 0.38f;   // caida agil
+            float v = mag / 68f;                         // escala aprox 0..1
+            v *= (0.5f + 1.0f * ((float) i / N));        // baja graves, sube agudos -> parejo al ritmo (como PC)
+            if (v > 1f) v = 1f;
+            if (v < 0.02f) v = 0.02f;
+            target[i] = v;                               // una sola suavizacion: la hace onDraw (sube rapido, baja agil)
         }
         if (activo) postInvalidate();
     }

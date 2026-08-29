@@ -1900,8 +1900,12 @@ public class MainActivity extends Activity {
         try { if (vizBg != null) { if (anillos) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
         try { if (particles != null) { particles.setParts(parts); particles.setBrillo(brillo); if (parts || brillo) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
         // Efecto "Nombre + ecualizador" (modo 5) y "Disco girando" (modo 6, tambien muestra el nombre+ecualizador al lado)
+        boolean eqOn = (efectoModo == 5 || efectoModo == 6);
         try {
-            boolean eqOn = (efectoModo == 5 || efectoModo == 6);
+            // en disco y letras se oculta la caratula nitida (queda el fondo borroso, como en PC)
+            if (imgArt != null) imgArt.setVisibility((efectoModo == 6 || efectoModo == 7) ? View.INVISIBLE : View.VISIBLE);
+        } catch (Exception e) {}
+        try {
             if (eqNombre != null) {
                 if (eqOn) {
                     Song s = cancionActual();
@@ -1910,12 +1914,16 @@ public class MainActivity extends Activity {
                 eqNombre.setSonando(sonando);
                 eqNombre.setActivo(eqOn);
             }
+        } catch (Exception e) {}
+        try {
             if (discoView != null) {
                 boolean discoOn = (efectoModo == 6);
                 if (discoOn) discoView.setCover(portadaActualBmp);
                 discoView.setSonando(sonando);
                 discoView.setActivo(discoOn);
             }
+        } catch (Exception e) {}
+        try {
             // Efecto Letras (modo 7)
             boolean letrasOn = (efectoModo == 7);
             if (letrasTexto != null) letrasTexto.setVisibility(letrasOn ? View.VISIBLE : View.GONE);
@@ -2829,15 +2837,18 @@ public class MainActivity extends Activity {
             public void run(){
                 try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
                 int hechos = 0;
+                final int total = corrList.size();
                 for (int i = 0; i < corrList.size(); i++) {
+                    if (!corrAprob[i]) { final int idx0 = i + 1; runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx0); }}); continue; }
                     final int idx = i + 1;
-                    runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx); }});
-                    if (!corrAprob[i]) continue;
                     Song s = corrList.get(i);
                     String[] mj = corrProp.get(i);
                     String tit = mj[0], art = mj[1], url = mj[2];
+                    final String nombreNuevo = (art.length() > 0 ? art + " - " + tit : tit);
+                    final int hechosAhora = hechos + 1;
+                    runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx); pd.setMessage("Cambiando " + hechosAhora + "/" + total + ":\n" + nombreNuevo); }});
                     s.title = tit; if (art.length() > 0) s.artist = art;
-                    String nombreArch = (art.length() > 0 ? art + " - " + tit : tit);
+                    String nombreArch = nombreNuevo;
                     renombrarEnUsb(s, nombreArch);
                     byte[] img = (url != null && url.length() > 0) ? bajarUrl(url) : null;
                     if (img != null) { synchronized (artCache) { artCache.put(s.path, img); } }
@@ -2851,7 +2862,7 @@ public class MainActivity extends Activity {
                         try { pd.dismiss(); } catch (Exception e) {}
                         try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
                         refrescarSiActual(cancionActual());
-                        Toast.makeText(MainActivity.this, fh + " nombre(s) corregido(s)", Toast.LENGTH_LONG).show();
+                        Toast.makeText(MainActivity.this, "\u2713 Completado: " + fh + " nombre(s) corregido(s)", Toast.LENGTH_LONG).show();
                     }
                 });
             }
