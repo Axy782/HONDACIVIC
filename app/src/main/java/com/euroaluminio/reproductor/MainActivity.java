@@ -1983,11 +1983,16 @@ public class MainActivity extends Activity {
                 new int[]{0xFF262626, 0xFF0C0C0C, 0xFF050505}, new float[]{0f, 0.34f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setShader(rg); cv.drawCircle(cx, cy, r, p); p.setShader(null);
             // SURCOS finos que cubren TODO el disco (como PC: anillos cada ~3px)
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x12FFFFFF);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x16FFFFFF);
             for (float rr = r; rr > r*0.13f; rr -= 3f) cv.drawCircle(cx, cy, rr, p);
+            // DOS reflejos de luz OPUESTOS (como vinilo real cuando la luz le pega)
+            android.graphics.SweepGradient sw = new android.graphics.SweepGradient(cx, cy,
+                new int[]{0x00FFFFFF, 0x22FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x1CFFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF},
+                new float[]{0f, 0.12f, 0.26f, 0.5f, 0.62f, 0.76f, 0.9f, 1f});
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(sw); cv.drawCircle(cx, cy, r, p); p.setShader(null);
             // brillo diagonal tipo saten (::before del PC) -> le da el look real
             android.graphics.LinearGradient sheen = new android.graphics.LinearGradient(cx-r, cy-r, cx+r, cy+r,
-                new int[]{0x2EFFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x10FFFFFF}, new float[]{0f, 0.35f, 0.65f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+                new int[]{0x2AFFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x0EFFFFFF}, new float[]{0f, 0.35f, 0.65f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(sheen); cv.drawCircle(cx, cy, r, p); p.setShader(null);
             // brillo puntual suave arriba-izquierda (radial 38% 32% del PC)
             android.graphics.RadialGradient spot = new android.graphics.RadialGradient(cx-r*0.24f, cy-r*0.36f, r*0.30f,

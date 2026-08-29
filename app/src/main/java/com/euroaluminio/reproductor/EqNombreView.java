@@ -20,6 +20,7 @@ public class EqNombreView extends View {
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
+    private final float[] magSmooth = new float[N];   // suavizado interno como el navegador (smoothingTimeConstant 0.62)
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -47,13 +48,15 @@ public class EqNombreView extends View {
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            // escala dB con VENTANA (igual que getByteFrequencyData del PC): las bandas suaves caen y las fuertes saltan -> baila natural
-            float db = (float) (20.0 * Math.log10(mag + 1.0));   // ~0..45
-            float v = (db - 6f) / (40f - 6f);                    // ventana: <6dB baja a 0, >40dB llena
-            v *= (0.7f + 0.7f * ((float) i / N));                // sube un poco los agudos
+            // suavizado interno como el navegador (smoothingTimeConstant 0.62) -> movimiento natural
+            magSmooth[i] = magSmooth[i] * 0.62f + mag * 0.38f;
+            // dB con ventana (imita getByteFrequencyData del PC: valor 0..1 natural)
+            float db = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
+            float v = (db - 10f) / (42f - 10f);
+            v *= (0.5f + 1.0f * ((float) i / N));        // reparto EXACTO del PC (graves menos, agudos mas)
             if (v > 1f) v = 1f;
             if (v < 0f) v = 0f;
-            target[i] = v;                               // una sola suavizacion: la hace onDraw (sube rapido, baja agil)
+            target[i] = v;
         }
         if (activo) postInvalidate();
     }
@@ -128,8 +131,8 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;     // sube ágil
-            else h[i] += (target[i] - h[i]) * 0.32f;                      // baja con cuerpo (natural, no seco)
+            if (target[i] > h[i]) h[i] = target[i];                       // sube al instante (EXACTO como PC)
+            else h[i] = h[i] * 0.70f + target[i] * 0.30f;                 // baja suave 0.70/0.30 (EXACTO como PC)
             float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
