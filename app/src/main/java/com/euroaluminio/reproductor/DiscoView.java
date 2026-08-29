@@ -23,8 +23,12 @@ public class DiscoView extends View {
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int lastSize = 0;
 
-    public DiscoView(Context c) { super(c); }
-    public DiscoView(Context c, AttributeSet a) { super(c, a); }
+    public DiscoView(Context c) { super(c); ini(); }
+    public DiscoView(Context c, AttributeSet a) { super(c, a); ini(); }
+    private void ini() {
+        try { setLayerType(LAYER_TYPE_SOFTWARE, null); } catch (Exception e) {}   // dibujo por software: el giro+bitmap no falla en Android viejo
+        try { setWillNotDraw(false); } catch (Exception e) {}
+    }
 
     public void setCover(Bitmap cover) { coverActual = cover; discoBmp = null; lastSize = 0; if (activo) invalidate(); }
     public void setActivo(boolean a) { activo = a; setVisibility(a ? VISIBLE : GONE); if (a) invalidate(); }

@@ -2001,7 +2001,7 @@ public class MainActivity extends Activity {
         letraSongPath = s.path;
         synchronized (letraLock){ letraTiempos.clear(); letraLineas.clear(); letraSync=false; letraPlain=null; }
         letraOffset = 0; letraUltimaIdx = -2;
-        if (letrasTexto != null) letrasTexto.setText("");
+        if (letrasTexto != null) letrasTexto.setText("Buscando letra...");
         mostrarAvisoLetra("");
         new Thread(new Runnable(){ public void run(){
             String txt = null;
@@ -2011,12 +2011,12 @@ public class MainActivity extends Activity {
             } catch (Exception e) {}
             // 2) bajar de internet
             if (txt == null){
-                if (!hayInternet()){ mostrarAvisoLetra("Sin conexion: no se pudo bajar la letra"); return; }
-                runOnUiThread(new Runnable(){ public void run(){ if (letrasTexto!=null) letrasTexto.setText("Bajando letra..."); }});
+                if (!hayInternet()){ ponerTextoLetra("Sin conexion a internet"); return; }
+                ponerTextoLetra("Bajando letra...");
                 txt = bajarLetra(s);
                 if (txt != null && !txt.startsWith("PLAIN\n")){ try { java.io.File lf=archivoLrc(s); if(lf!=null) escribirArchivoTexto(lf, txt); } catch (Exception e) {} }
             }
-            if (txt == null){ mostrarAvisoLetra(hayInternet()? "No se encontro la letra de esta cancion" : "Sin conexion: no se pudo bajar la letra"); runOnUiThread(new Runnable(){ public void run(){ if(letrasTexto!=null) letrasTexto.setText(""); }}); return; }
+            if (txt == null){ ponerTextoLetra(hayInternet()? "Sin letra sincronizada" : "Sin conexion a internet"); return; }
             final double off = leerOffsetLRC(txt);
             parseLetra(txt);
             final boolean sync = letraSync;
@@ -2025,14 +2025,19 @@ public class MainActivity extends Activity {
                     letraOffset = off;
                     if (letraOffLbl != null) letraOffLbl.setText((letraOffset>0?"+":"") + String.format(java.util.Locale.US,"%.1f",letraOffset) + "s");
                     mostrarAvisoLetra("");
+                    if (letrasTexto != null) letrasTexto.setText("");
+                    letraUltimaIdx = -2;
+                    try { actualizarLetraLinea(); } catch (Exception e) {}
                 } else {
                     synchronized (letraLock){ letraTiempos.clear(); letraLineas.clear(); letraPlain=null; letraSync=false; }
-                    if (letrasTexto != null) letrasTexto.setText("");
-                    mostrarAvisoLetra("No hay letra sincronizada para esta cancion");
+                    if (letrasTexto != null) letrasTexto.setText("Sin letra sincronizada");
+                    mostrarAvisoLetra("");
                 }
-                letraUltimaIdx = -2;
             }});
         }}).start();
+    }
+    private void ponerTextoLetra(final String m){
+        runOnUiThread(new Runnable(){ public void run(){ if (letrasTexto != null) letrasTexto.setText(m); }});
     }
     private String enc(String s){ try { return java.net.URLEncoder.encode(s==null?"":s,"UTF-8"); } catch (Exception e) { return ""; } }
     private String limpiarParaLetra(String s){

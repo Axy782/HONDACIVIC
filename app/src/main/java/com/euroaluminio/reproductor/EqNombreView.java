@@ -47,8 +47,9 @@ public class EqNombreView extends View {
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            float v = mag / 68f;                         // escala aprox 0..1
-            v *= (0.5f + 1.0f * ((float) i / N));        // baja graves, sube agudos -> parejo al ritmo (como PC)
+            // escala LOGARITMICA (dB) para que se vea lleno y bailando como el PC (getByteFrequencyData)
+            float v = (float) (Math.log10(1 + mag) / Math.log10(1 + 130f));
+            v *= (0.62f + 0.85f * ((float) i / N));       // baja graves, sube agudos -> parejo al ritmo
             if (v > 1f) v = 1f;
             if (v < 0.02f) v = 0.02f;
             target[i] = v;                               // una sola suavizacion: la hace onDraw (sube rapido, baja agil)
