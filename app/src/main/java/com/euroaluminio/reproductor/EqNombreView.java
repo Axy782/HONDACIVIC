@@ -49,15 +49,15 @@ public class EqNombreView extends View {
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
             // COMPUERTA: si esta banda casi no tiene energia, la barra baja (queda plana)
-            if (mag < 4.5f) { target[i] *= 0.5f; continue; }
+            if (mag < 3.5f) { target[i] *= 0.55f; continue; }
             // PICO POR BANDA: cada banda usa su propia altura -> cuando ESE instrumento suena, SU barra salta
-            pico[i] = Math.max(mag, pico[i] * 0.94f);
+            pico[i] = Math.max(mag, pico[i] * 0.96f);
             if (pico[i] < 9f) pico[i] = 9f;
             float val = mag / pico[i];               // 0..1 relativo a esta banda
-            val = 0.18f + val * 0.82f;               // cuerpo: cuando suena, se ve con fuerza
+            val = 0.12f + val * 0.88f;               // cuerpo: cuando suena, se ve con fuerza
             if (val > 1f) val = 1f;
             if (val > target[i]) target[i] = val;    // ataque: salta al instante
-            else target[i] = target[i] * 0.5f + val * 0.5f;   // caida agil
+            else target[i] = target[i] * 0.62f + val * 0.38f;   // caida agil
         }
         if (activo) postInvalidate();
     }
@@ -125,8 +125,8 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;    // sube casi instantáneo
-            else h[i] += (target[i] - h[i]) * 0.5f;                      // baja ágil
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.8f;     // sube rápido
+            else h[i] += (target[i] - h[i]) * 0.28f;                     // baja suave (natural)
             float bh = h[i] * 34 * sc + 1.5f;
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.55f, by + bh, pBar);
         }

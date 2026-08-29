@@ -377,9 +377,11 @@ public class MainActivity extends Activity {
     private boolean descargaEnCurso = false;
     private VisualizerView vizBg = null;
     private EqNombreView eqNombre = null;
+    private DiscoView discoView = null;
+    private Bitmap portadaActualBmp = null;
     private ParticlesView particles = null;
     private boolean efectosOn = true;
-    private int efectoModo = 4;   // 0 anillos, 1 partículas, 2 brillo, 3 todos, 4 ninguno (POR DEFECTO: apagado)
+    private int efectoModo = 5;   // solo 2 efectos: 5=Ecualizador con carátula, 6=Disco girando
     private Visualizer visualizer = null;
 
     private final Handler handler = new Handler();
@@ -446,7 +448,9 @@ public class MainActivity extends Activity {
         optPantalla = prefs.getBoolean("pantalla", false);
         optVolArranque = prefs.getBoolean("volArranque2", false);
         efectosOn = prefs.getBoolean("efectos", true);
-        efectoModo = prefs.getInt("efectoModo2", 4);
+        efectoModo = prefs.getInt("efectoModo2", 5);
+        if (efectoModo != 4 && efectoModo != 5 && efectoModo != 6) efectoModo = 5;   // 3 efectos permitidos
+
         aplicarTema();
 
         findViewById(R.id.btnAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
@@ -526,13 +530,18 @@ public class MainActivity extends Activity {
         if (vizBg != null) { vizBg.setTipo(1); vizBg.setColor(accent); }
         eqNombre = (EqNombreView) findViewById(R.id.eqNombre);
         if (eqNombre != null) eqNombre.setColor(0xFFFFC107);
+        discoView = (DiscoView) findViewById(R.id.discoView);
         particles = (ParticlesView) findViewById(R.id.particulas);
         if (particles != null) particles.setColor(accent);
         findViewById(R.id.btnVis).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            efectoModo = (efectoModo + 1) % 6; prefs.edit().putInt("efectoModo2", efectoModo).apply();
+            // 3 efectos: 5=Ecualizador, 6=Disco girando, 4=Sin efectos
+            if (efectoModo == 5) efectoModo = 6;
+            else if (efectoModo == 6) efectoModo = 4;
+            else efectoModo = 5;
+            prefs.edit().putInt("efectoModo2", efectoModo).apply();
             aplicarEfectos();
-            String[] nom = { "Solo anillos", "Solo partículas", "Solo brillo", "Todos", "Sin efectos", "Nombre + ecualizador" };
-            Toast.makeText(MainActivity.this, nom[efectoModo], Toast.LENGTH_SHORT).show();
+            String txt = (efectoModo == 6) ? "Disco girando" : (efectoModo == 4 ? "Sin efectos" : "Ecualizador con carátula");
+            Toast.makeText(MainActivity.this, txt, Toast.LENGTH_SHORT).show();
         }});
         list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener(){
             public boolean onItemLongClick(AdapterView<?> p, View v, int position, long id){
@@ -653,7 +662,7 @@ public class MainActivity extends Activity {
         // PRIMER ARRANQUE tras instalar: dejar todo listo (efectos apagados, auto-detección, detectar USB)
         if (prefs.getBoolean("primeraVez", true)) {
             prefs.edit().putBoolean("primeraVez", false)
-                .putInt("efectoModo2", 4)        // efectos de Vista: apagados
+                .putInt("efectoModo2", 5)        // efectos de Vista: ecualizador con carátula
                 .putBoolean("autoDetectar", true) // detectar USB solo
                 .apply();
             efectoModo = 4; optAutoDetectar = true;
@@ -941,6 +950,8 @@ public class MainActivity extends Activity {
                         if (m[1] != null && m[1].trim().length() > 0) { s.artist = m[1]; txtArtist.setText(m[1]); }
                         if (m[2] != null && m[2].trim().length() > 0) s.album = m[2];
                         if (eqNombre != null) eqNombre.setInfo(s.artist != null && s.artist.length() > 0 ? s.artist : "", s.title);
+                        portadaActualBmp = portada;
+                        if (discoView != null) discoView.setCover(portada);   // portada al centro del disco (null = disco genérico)
                         if (portada != null) {
                             imgArt.setImageBitmap(portada);
                             if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
@@ -1875,16 +1886,22 @@ public class MainActivity extends Activity {
         boolean brillo  = sonando && (efectoModo == 2 || efectoModo == 3);
         try { if (vizBg != null) { if (anillos) vizBg.iniciar(); else vizBg.parar(); } } catch (Exception e) {}
         try { if (particles != null) { particles.setParts(parts); particles.setBrillo(brillo); if (parts || brillo) particles.iniciar(); else particles.parar(); } } catch (Exception e) {}
-        // Efecto "Nombre + ecualizador" (modo 5)
+        // Efecto "Nombre + ecualizador" (modo 5) y "Disco girando" (modo 6, tambien muestra el nombre+ecualizador al lado)
         try {
+            boolean eqOn = (efectoModo == 5 || efectoModo == 6);
             if (eqNombre != null) {
-                boolean on = (efectoModo == 5);
-                if (on) {
+                if (eqOn) {
                     Song s = cancionActual();
                     if (s != null) eqNombre.setInfo(s.artist != null && s.artist.length() > 0 ? s.artist : "", s.title);
                 }
                 eqNombre.setSonando(sonando);
-                eqNombre.setActivo(on);
+                eqNombre.setActivo(eqOn);
+            }
+            if (discoView != null) {
+                boolean discoOn = (efectoModo == 6);
+                if (discoOn) discoView.setCover(portadaActualBmp);
+                discoView.setSonando(sonando);
+                discoView.setActivo(discoOn);
             }
         } catch (Exception e) {}
     }
@@ -2437,6 +2454,185 @@ public class MainActivity extends Activity {
         try { MediaMetadataRetriever r = new MediaMetadataRetriever(); r.setDataSource(s.path); byte[] p = r.getEmbeddedPicture(); try { r.release(); } catch (Exception e) {} return p; } catch (Exception e) { return null; }
     }
     // ==== SUGERIR NOMBRE CORRECTO (busca en iTunes/Deezer y muestra opciones con carátula) ====
+    // ===== EXAMINAR Y CORREGIR TODOS LOS NOMBRES DEL USB =====
+    private java.util.ArrayList<Song> corrList;
+    private java.util.ArrayList<String[]> corrProp;   // [titulo, artista, url] por cada cancion
+    private boolean[] corrAprob;
+    private boolean corrCancelar = false;
+
+    private void examinarNombres() {
+        if (!hayInternet()) { Toast.makeText(this, "Necesitas internet para examinar los nombres", Toast.LENGTH_LONG).show(); return; }
+        final java.util.ArrayList<Song> todas = new java.util.ArrayList<Song>();
+        for (Carpeta c : carpetas) if (!c.esLista) todas.addAll(c.songs);
+        if (todas.isEmpty()) { Toast.makeText(this, "No hay canciones para examinar", Toast.LENGTH_SHORT).show(); return; }
+        corrCancelar = false;
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setTitle("Examinando nombres");
+        pd.setMessage("Buscando en internet...");
+        pd.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        pd.setMax(todas.size());
+        pd.setCancelable(true);
+        pd.setButton(android.app.ProgressDialog.BUTTON_NEGATIVE, "Detener", new android.content.DialogInterface.OnClickListener(){
+            public void onClick(android.content.DialogInterface d, int w){ corrCancelar = true; }
+        });
+        pd.show();
+        new Thread(new Runnable(){
+            public void run(){
+                try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+                final java.util.ArrayList<Song> lst = new java.util.ArrayList<Song>();
+                final java.util.ArrayList<String[]> prop = new java.util.ArrayList<String[]>();
+                for (int i = 0; i < todas.size(); i++) {
+                    if (corrCancelar) break;
+                    final Song s = todas.get(i);
+                    final int idx = i + 1;
+                    runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx); pd.setMessage(nombreDe(s)); }});
+                    String[] mej = mejorSugerencia(s);
+                    if (mej != null) {
+                        // solo proponer si el nombre nuevo es distinto al actual
+                        String nuevo = (mej[1].length() > 0 ? mej[1] + " - " + mej[0] : mej[0]);
+                        if (!nuevo.equalsIgnoreCase(nombreDe(s))) { lst.add(s); prop.add(mej); }
+                    }
+                    try { Thread.sleep(200); } catch (Exception e) {}
+                }
+                runOnUiThread(new Runnable(){
+                    public void run(){
+                        try { pd.dismiss(); } catch (Exception e) {}
+                        if (lst.isEmpty()) { Toast.makeText(MainActivity.this, "No se encontraron mejoras (o ya estan bien)", Toast.LENGTH_LONG).show(); return; }
+                        corrList = lst; corrProp = prop; corrAprob = new boolean[lst.size()];
+                        for (int k = 0; k < corrAprob.length; k++) corrAprob[k] = true;
+                        mostrarListaCorreccion();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private String[] mejorSugerencia(Song s) {
+        String artista = (s.artist != null && !s.artist.equalsIgnoreCase("Desconocido")) ? s.artist.trim() : "";
+        String cancion = (s.title != null) ? s.title.trim() : "";
+        String base = nombreParaPartir(s);
+        if (artista.length() == 0 && base.indexOf("-") >= 0) {
+            String[] pz = base.split("\\s*-\\s*");
+            if (pz.length >= 2) { artista = pz[0].trim(); cancion = pz[pz.length - 1].trim(); }
+        }
+        if (cancion.length() == 0) cancion = base;
+        java.util.ArrayList<String[]> items = new java.util.ArrayList<String[]>();
+        if (artista.length() > 0 && cancion.length() > 0) sugItunes(limpiarBusqueda(artista + " " + cancion), items);
+        if (items.isEmpty() && cancion.length() > 0) sugItunes(limpiarBusqueda(cancion), items);
+        if (items.isEmpty() && artista.length() > 0 && cancion.length() > 0) sugDeezer(limpiarBusqueda(artista + " " + cancion), items);
+        if (items.isEmpty() && cancion.length() > 0) sugDeezer(limpiarBusqueda(cancion), items);
+        if (items.isEmpty()) return null;
+        return items.get(0);   // [titulo, artista, url]
+    }
+
+    private void mostrarListaCorreccion() {
+        final float d = getResources().getDisplayMetrics().density;
+        android.widget.ListView lv = new android.widget.ListView(this);
+        final android.widget.BaseAdapter ad = new android.widget.BaseAdapter(){
+            public int getCount(){ return corrList.size(); }
+            public Object getItem(int i){ return null; }
+            public long getItemId(int i){ return i; }
+            public View getView(final int i, View cv, ViewGroup pp){
+                android.widget.LinearLayout row = new android.widget.LinearLayout(MainActivity.this);
+                row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+                int pd2 = (int)(8*d); row.setPadding(pd2,pd2,pd2,pd2);
+                final android.widget.CheckBox cb = new android.widget.CheckBox(MainActivity.this);
+                cb.setChecked(corrAprob[i]);
+                cb.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ corrAprob[i] = cb.isChecked(); }});
+                android.widget.LinearLayout col = new android.widget.LinearLayout(MainActivity.this);
+                col.setOrientation(android.widget.LinearLayout.VERTICAL);
+                android.widget.LinearLayout.LayoutParams clp = new android.widget.LinearLayout.LayoutParams(0, -2, 1f);
+                clp.leftMargin = (int)(8*d); col.setLayoutParams(clp);
+                TextView t1 = new TextView(MainActivity.this);
+                t1.setText(nombreDe(corrList.get(i))); t1.setTextColor(0xFF8B8B9A); t1.setTextSize(12); t1.setSingleLine(true);
+                TextView t2 = new TextView(MainActivity.this);
+                String[] mj = corrProp.get(i);
+                t2.setText("-> " + (mj[1].length()>0 ? mj[1] + " - " + mj[0] : mj[0]));
+                t2.setTextColor(0xFFFFC107); t2.setTextSize(14); t2.setTypeface(null, android.graphics.Typeface.BOLD);
+                col.addView(t1); col.addView(t2);
+                row.addView(cb); row.addView(col);
+                return row;
+            }
+        };
+        lv.setAdapter(ad);
+        new AlertDialog.Builder(this)
+            .setTitle("Revisa y aplica (" + corrList.size() + ")")
+            .setView(lv)
+            .setPositiveButton("Aplicar marcados", new android.content.DialogInterface.OnClickListener(){
+                public void onClick(android.content.DialogInterface dg, int w){ aplicarCorrecciones(); }
+            })
+            .setNegativeButton("Cancelar", null).show();
+    }
+
+    private void aplicarCorrecciones() {
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setTitle("Aplicando");
+        pd.setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL);
+        pd.setMax(corrList.size());
+        pd.setCancelable(false);
+        pd.show();
+        new Thread(new Runnable(){
+            public void run(){
+                try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+                int hechos = 0;
+                for (int i = 0; i < corrList.size(); i++) {
+                    final int idx = i + 1;
+                    runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx); }});
+                    if (!corrAprob[i]) continue;
+                    Song s = corrList.get(i);
+                    String[] mj = corrProp.get(i);
+                    String tit = mj[0], art = mj[1], url = mj[2];
+                    s.title = tit; if (art.length() > 0) s.artist = art;
+                    String nombreArch = (art.length() > 0 ? art + " - " + tit : tit);
+                    renombrarEnUsb(s, nombreArch);
+                    byte[] img = (url != null && url.length() > 0) ? bajarUrl(url) : null;
+                    if (img != null) { synchronized (artCache) { artCache.put(s.path, img); } }
+                    embedArt(s, img);   // escribe titulo/artista (y caratula si hay) dentro del MP3
+                    hechos++;
+                    try { Thread.sleep(120); } catch (Exception e) {}
+                }
+                final int fh = hechos;
+                runOnUiThread(new Runnable(){
+                    public void run(){
+                        try { pd.dismiss(); } catch (Exception e) {}
+                        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
+                        refrescarSiActual(cancionActual());
+                        Toast.makeText(MainActivity.this, fh + " nombre(s) corregido(s)", Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private boolean renombrarEnUsb(Song s, String nuevoSinExt) {
+        try {
+            File viejo = new File(s.path);
+            if (!viejo.exists()) return false;
+            String ext = "";
+            int dot = s.path.lastIndexOf('.');
+            if (dot > 0) ext = s.path.substring(dot);
+            String limpio = sanearArchivo(nuevoSinExt);
+            if (limpio.length() == 0) return false;
+            File nuevo = new File(viejo.getParent(), limpio + ext);
+            if (nuevo.exists() && !nuevo.getAbsolutePath().equals(viejo.getAbsolutePath())) {
+                limpio = limpio + " " + (System.currentTimeMillis() % 1000);
+                nuevo = new File(viejo.getParent(), limpio + ext);
+            }
+            boolean ok = viejo.renameTo(nuevo);
+            if (ok) s.path = nuevo.getAbsolutePath();
+            return ok;
+        } catch (Exception e) { return false; }
+    }
+    private String sanearArchivo(String n) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < n.length(); i++) {
+            char c = n.charAt(i);
+            if (Character.isLetterOrDigit(c) || c==' ' || c=='-' || c=='_' || c=='(' || c==')' || c=='[' || c==']' || c=='&' || c=='\'') b.append(c);
+        }
+        return b.toString().replaceAll("\\s+", " ").trim();
+    }
+
     private void sugItunes(String term, java.util.ArrayList<String[]> out) {
         try {
             String q = URLEncoder.encode(term, "UTF-8");
