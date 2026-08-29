@@ -1937,6 +1937,8 @@ public class MainActivity extends Activity {
                 if (discoOn) {
                     android.graphics.Bitmap bmp = obtenerDiscoBitmap(portadaActualBmp);
                     if (bmp != null) discoImg.setImageBitmap(bmp);
+                    // correr el disco a la IZQUIERDA (deja la derecha para el nombre + ecualizador, como en PC)
+                    try { int sw = getResources().getDisplayMetrics().widthPixels; discoImg.setTranslationX(-sw * 0.22f); } catch (Exception e) {}
                     discoImg.setVisibility(View.VISIBLE);
                     iniciarGiroDisco(sonando);
                 } else {
@@ -1973,6 +1975,9 @@ public class MainActivity extends Activity {
             cv.drawCircle(cx, cy, r, p);
             p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(0x20FFFFFF);
             for (float rr = r*0.40f; rr < r*0.98f; rr += size*0.02f) cv.drawCircle(cx, cy, rr, p);
+            // brillo/reflejo (como el vinilo del PC)
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(size*0.05f); p.setColor(0x18FFFFFF);
+            cv.drawArc(new android.graphics.RectF(cx-r*0.82f, cy-r*0.82f, cx+r*0.82f, cy+r*0.82f), -65, 55, false, p);
             float lr = r*0.34f;
             if (cover != null && !cover.isRecycled()){
                 android.graphics.Path path = new android.graphics.Path(); path.addCircle(cx, cy, lr, android.graphics.Path.Direction.CW);
