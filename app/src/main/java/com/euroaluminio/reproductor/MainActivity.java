@@ -376,8 +376,7 @@ public class MainActivity extends Activity {
     private android.database.ContentObserver volObserver = null;
     private boolean descargaEnCurso = false;
     private VisualizerView vizBg = null;
-    private EqNombreView eqNombre = null;
-    private DiscoView discoView = null;
+
     // ---- Letras ----
     private android.widget.TextView letrasTexto = null, letrasAviso = null, letraOffLbl = null;
     private android.view.View letrasDim = null, letraCtrl = null;
@@ -541,6 +540,17 @@ public class MainActivity extends Activity {
         if (vizBg != null) { vizBg.setTipo(1); vizBg.setColor(accent); }
         eqNombre = (EqNombreView) findViewById(R.id.eqNombre);
         if (eqNombre != null) eqNombre.setColor(0xFFFFC107);
+        discoView = (DiscoView) findViewById(R.id.discoView);
+        discoImg = (android.widget.ImageView) findViewById(R.id.discoImg);
+        letrasTexto = (android.widget.TextView) findViewById(R.id.letrasTexto);
+        letrasAviso = (android.widget.TextView) findViewById(R.id.letrasAviso);
+        letrasDim = findViewById(R.id.letrasDim);
+        letraCtrl = findViewById(R.id.letraCtrl);
+        letraOffLbl = (android.widget.TextView) findViewById(R.id.letraOff);
+        try {
+            findViewById(R.id.btnLetraMenos).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ ajustarLetraOffset(-0.5); } });
+            findViewById(R.id.btnLetraMas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ ajustarLetraOffset(0.5); } });
+        } catch (Exception e) {}
 
         particles = (ParticlesView) findViewById(R.id.particulas);
         if (particles != null) particles.setColor(accent);
@@ -1916,12 +1926,19 @@ public class MainActivity extends Activity {
             }
         } catch (Exception e) {}
         try {
-            if (discoView != null) {
-                boolean discoOn = (efectoModo == 6);
-                if (discoOn) discoView.setCover(portadaActualBmp);
-                discoView.setSonando(sonando);
-                discoView.setActivo(discoOn);
+            boolean discoOn = (efectoModo == 6);
+            if (discoImg != null) {
+                if (discoOn) {
+                    android.graphics.Bitmap bmp = obtenerDiscoBitmap(portadaActualBmp);
+                    if (bmp != null) discoImg.setImageBitmap(bmp);
+                    discoImg.setVisibility(View.VISIBLE);
+                    iniciarGiroDisco(sonando);
+                } else {
+                    pararGiroDisco();
+                    discoImg.setVisibility(View.GONE);
+                }
             }
+            if (discoView != null) discoView.setActivo(false);   // ya no se usa la vista vieja
         } catch (Exception e) {}
         try {
             // Efecto Letras (modo 7)
@@ -1935,6 +1952,60 @@ public class MainActivity extends Activity {
                 if (s != null && (letraSongPath == null || !letraSongPath.equals(s.path))) cargarLetrasDe(s);
             }
         } catch (Exception e) {}
+    }
+    // ===== DISCO GIRANDO (ImageView + animacion, confiable en Android viejo) =====
+    private android.graphics.Bitmap obtenerDiscoBitmap(android.graphics.Bitmap cover){
+        String key = (cover != null && !cover.isRecycled()) ? ("c" + cover.getWidth() + "x" + cover.getHeight() + "@" + System.identityHashCode(cover)) : "generico";
+        if (discoBmpCache != null && key.equals(discoCacheKey)) return discoBmpCache;
+        try {
+            int size = 440;
+            android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
+            android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            float cx = size/2f, cy = size/2f, r = size/2f - 3;
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF0B0B0D);
+            cv.drawCircle(cx, cy, r, p);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(0x20FFFFFF);
+            for (float rr = r*0.40f; rr < r*0.98f; rr += size*0.02f) cv.drawCircle(cx, cy, rr, p);
+            float lr = r*0.34f;
+            if (cover != null && !cover.isRecycled()){
+                android.graphics.Path path = new android.graphics.Path(); path.addCircle(cx, cy, lr, android.graphics.Path.Direction.CW);
+                cv.save(); cv.clipPath(path);
+                android.graphics.Rect src = new android.graphics.Rect(0,0,cover.getWidth(),cover.getHeight());
+                android.graphics.RectF dst = new android.graphics.RectF(cx-lr, cy-lr, cx+lr, cy+lr);
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                cv.drawBitmap(cover, src, dst, p);
+                cv.restore();
+            } else {
+                p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFFC0392B);
+                cv.drawCircle(cx, cy, lr, p);
+                p.setColor(0xFFFFFFFF); p.setTextAlign(android.graphics.Paint.Align.CENTER);
+                p.setTextSize(lr*0.5f); p.setFakeBoldText(true);
+                cv.drawText("JFV", cx, cy + lr*0.18f, p);
+            }
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(3f); p.setColor(0x66000000);
+            cv.drawCircle(cx, cy, lr, p);
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF141118);
+            cv.drawCircle(cx, cy, size*0.022f, p);
+            discoBmpCache = bmp; discoCacheKey = key;
+            return bmp;
+        } catch (Throwable t) { return null; }
+    }
+    private void iniciarGiroDisco(boolean sonando){
+        if (discoImg == null) return;
+        if (!discoAnimando){
+            android.view.animation.RotateAnimation ra = new android.view.animation.RotateAnimation(
+                0f, 360f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+            ra.setDuration(4000);
+            ra.setRepeatCount(android.view.animation.Animation.INFINITE);
+            ra.setInterpolator(new android.view.animation.LinearInterpolator());
+            discoImg.startAnimation(ra);
+            discoAnimando = true;
+        }
+    }
+    private void pararGiroDisco(){
+        if (discoImg != null) discoImg.clearAnimation();
+        discoAnimando = false;
     }
     // ===== LETRAS (karaoke) =====
     private void ajustarLetraOffset(double d){
