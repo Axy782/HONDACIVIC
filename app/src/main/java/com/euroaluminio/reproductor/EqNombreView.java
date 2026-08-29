@@ -89,21 +89,28 @@ public class EqNombreView extends View {
         int x = w - bw - (int) (24 * sc);
         int y = hh / 2 - (int) (30 * sc);
 
+        // Ajustar el texto para que QUEPA (achica el tamaño; si aun asi es muy largo, corta con ...)
+        String uA = upper(artista), uC = upper(cancion);
+        float maxWa = w - (x + 26 * sc) - 8 * sc;
+        float maxWc = w - x - 8 * sc;
+        float szA = ajustarSize(uA, 22 * sc, 14 * sc, maxWa); uA = recortar(uA, szA, maxWa);
+        float szC = ajustarSize(uC, 30 * sc, 17 * sc, maxWc); uC = recortar(uC, szC, maxWc);
+
         // sombra sutil para que se lea sobre cualquier carátula
         pText.setColor(0xCC000000);
-        pText.setTextSize(22 * sc);
-        cv.drawText(upper(artista), x + (int) (28 * sc), y + 2, pText);
-        pText.setTextSize(30 * sc);
-        cv.drawText(upper(cancion), x + 2, y + (int) (30 * sc) + 2, pText);
+        pText.setTextSize(szA);
+        cv.drawText(uA, x + (int) (28 * sc), y + 2, pText);
+        pText.setTextSize(szC);
+        cv.drawText(uC, x + 2, y + (int) (30 * sc) + 2, pText);
 
         // artista (blanco)
         pText.setColor(0xFFFFFFFF);
-        pText.setTextSize(22 * sc);
-        cv.drawText(upper(artista), x + (int) (26 * sc), y, pText);
+        pText.setTextSize(szA);
+        cv.drawText(uA, x + (int) (26 * sc), y, pText);
         // canción (color)
         pText.setColor(color);
-        pText.setTextSize(30 * sc);
-        cv.drawText(upper(cancion), x, y + (int) (30 * sc), pText);
+        pText.setTextSize(szC);
+        cv.drawText(uC, x, y + (int) (30 * sc), pText);
 
         // línea + barras hacia ABAJO
         float by = y + (int) (46 * sc);
@@ -129,5 +136,18 @@ public class EqNombreView extends View {
         if (activo && sonando) postInvalidateDelayed(33);
     }
 
+    private float ajustarSize(String t, float base, float min, float maxW) {
+        if (t == null || t.length() == 0) return base;
+        float sz = base; pText.setTextSize(sz);
+        while (sz > min && pText.measureText(t) > maxW) { sz -= 1f; pText.setTextSize(sz); }
+        return sz;
+    }
+    private String recortar(String t, float sz, float maxW) {
+        if (t == null) return "";
+        pText.setTextSize(sz);
+        if (pText.measureText(t) <= maxW) return t;
+        while (t.length() > 1 && pText.measureText(t + "...") > maxW) t = t.substring(0, t.length() - 1);
+        return t + "...";
+    }
     private String upper(String s) { try { return s.toUpperCase(); } catch (Exception e) { return s; } }
 }
