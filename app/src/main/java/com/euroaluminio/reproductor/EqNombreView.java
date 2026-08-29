@@ -47,11 +47,12 @@ public class EqNombreView extends View {
                 sum += (float) Math.sqrt(re * re + im * im); cnt++;
             }
             float mag = (cnt > 0) ? sum / cnt : 0;
-            // escala LOGARITMICA (dB) para que se vea lleno y bailando como el PC (getByteFrequencyData)
-            float v = (float) (Math.log10(1 + mag) / Math.log10(1 + 130f));
-            v *= (0.62f + 0.85f * ((float) i / N));       // baja graves, sube agudos -> parejo al ritmo
+            // escala dB con VENTANA (igual que getByteFrequencyData del PC): las bandas suaves caen y las fuertes saltan -> baila natural
+            float db = (float) (20.0 * Math.log10(mag + 1.0));   // ~0..45
+            float v = (db - 6f) / (40f - 6f);                    // ventana: <6dB baja a 0, >40dB llena
+            v *= (0.7f + 0.7f * ((float) i / N));                // sube un poco los agudos
             if (v > 1f) v = 1f;
-            if (v < 0.02f) v = 0.02f;
+            if (v < 0f) v = 0f;
             target[i] = v;                               // una sola suavizacion: la hace onDraw (sube rapido, baja agil)
         }
         if (activo) postInvalidate();
@@ -127,8 +128,8 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.9f;      // sube al instante
-            else h[i] += (target[i] - h[i]) * 0.45f;                      // baja ágil (más rápido, como PC)
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;     // sube ágil
+            else h[i] += (target[i] - h[i]) * 0.32f;                      // baja con cuerpo (natural, no seco)
             float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
