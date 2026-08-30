@@ -16,7 +16,7 @@ public class EqNombreView extends View {
     private String artista = "", cancion = "";
     private int color = 0xFFFFC107;      // amarillo como el video
     private boolean activo = false, sonando = false;
-    private static final int N = 56;
+    private static final int N = 40;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
@@ -86,8 +86,17 @@ public class EqNombreView extends View {
     }
 
     public void setInfo(String art, String can) {
-        artista = (art == null) ? "" : art;
-        cancion = (can == null) ? "" : can;
+        String a = (art == null) ? "" : art.trim();
+        String c = (can == null) ? "" : can.trim();
+        if (a.equalsIgnoreCase("Desconocido")) a = "";
+        // regla del PC: si no hay artista y el nombre tiene " - ", se divide (primera parte arriba, resto abajo)
+        if (a.length() == 0 && c.indexOf(" - ") >= 0) {
+            int q = c.indexOf(" - ");
+            a = c.substring(0, q).trim();
+            c = c.substring(q + 3).trim();
+        }
+        artista = a;
+        cancion = c;
         if (activo) invalidate();
     }
     public void setColor(int col) { color = col; }
@@ -150,7 +159,7 @@ public class EqNombreView extends View {
         for (int i = 0; i < N; i++) {
             if (target[i] > h[i]) h[i] = target[i];                       // sube al instante
             else h[i] = h[i] * 0.62f + target[i] * 0.38f;                 // baja con caida visible (picudo, natural)
-            float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
+            float bh = h[i] * 42 * sc + 1.5f;                            // tira compacta (como PC)
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
         // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento

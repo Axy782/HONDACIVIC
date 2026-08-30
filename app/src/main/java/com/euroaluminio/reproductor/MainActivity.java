@@ -2371,6 +2371,7 @@ public class MainActivity extends Activity {
         else if (optTema.equals("verde")) accent = 0xFF22C55E;
         else accent = 0xFFFFB020;
         try { ((Button) findViewById(R.id.btnEq)).setTextColor(0xFFFFFFFF); } catch (Exception e) {}
+        try { if (eqNombre != null) eqNombre.setColor(accent); } catch (Exception e) {}   // barras y cancion en el color del tema (como PC)
         try { pintarFav(); } catch (Exception e) {}
         try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
         try { pintarSegCalidad(); pintarSegOrden(); } catch (Exception e) {}
