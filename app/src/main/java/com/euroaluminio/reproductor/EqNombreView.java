@@ -25,8 +25,9 @@ public class EqNombreView extends View {
     private static final int N = 40;                       // 40 barras (como PC)
     private final float[] magLin = new float[80];          // magnitudes lineales suavizadas (0.62 como Web Audio)
     private final float[] eqSmooth = new float[N];         // sube instante / baja 0.70-0.30 (exacto PC)
-    private final float[] picoCae = new float[N];          // pico que cae lento encima de cada barra (estilo equipo de musica)
-    private final float[] picoVel = new float[N];          // velocidad de caida del pico (acelera al caer)
+    private float bassProm = 0f;                            // promedio del bajo (para detectar el golpe)
+    private float golpe = 0f;                               // pulso del golpe: sube a 1 y cae rapido (punch ritmico)
+
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -123,6 +124,12 @@ public class EqNombreView extends View {
             if (v > 1f) v = 1f;
             vTmp[i] = v;
         }
+        // ===== DETECTOR DE GOLPE (beat) -> da la sensacion de RITMO como el PC =====
+        float bass = 0f;
+        for (int b = 1; b < 6 && b < nb; b++) bass += magLin[b];
+        bass /= 5f;
+        bassProm = bassProm * 0.92f + bass * 0.08f;         // promedio lento del bajo
+        if (bass > bassProm * 1.35f && golpe < 0.2f) golpe = 1f;   // golpe fuerte detectado -> pulso
         return true;
     }
 
@@ -259,6 +266,9 @@ public class EqNombreView extends View {
         float barW = Math.max(1.5f, step * 0.62f);
         for (int i = 0; i < N; i++) {
             float v = sonando ? vTmp[i] : 0f;
+            // PULSO del golpe: en cada beat todas las barras pegan un salto extra (sensacion de ritmo)
+            v = v * (1f + golpe * 0.6f);
+            if (v > 1f) v = 1f;
             // barra: sube al instante, baja suave
             if (v > eqSmooth[i]) eqSmooth[i] = v;
             else eqSmooth[i] = eqSmooth[i] * 0.72f + v * 0.28f;
@@ -268,6 +278,7 @@ public class EqNombreView extends View {
             pBar.setColor(color);
             cv.drawRect(bx + i * step, base, bx + i * step + barW, base + bh, pBar);
         }
+        golpe *= 0.82f;   // el golpe cae rapido -> punch (no queda inflado)
         pBar.setColor(color);
         if (activo && sonando) postInvalidateDelayed(16);      // ~60 cuadros/seg
         else if (activo) postInvalidateDelayed(50);
