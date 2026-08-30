@@ -25,6 +25,8 @@ public class EqNombreView extends View {
     private static final int N = 40;                       // 40 barras (como PC)
     private final float[] magLin = new float[80];          // magnitudes lineales suavizadas (0.62 como Web Audio)
     private final float[] eqSmooth = new float[N];         // sube instante / baja 0.70-0.30 (exacto PC)
+    private final float[] picoCae = new float[N];          // pico que cae lento encima de cada barra (estilo equipo de musica)
+    private final float[] picoVel = new float[N];          // velocidad de caida del pico (acelera al caer)
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -109,13 +111,15 @@ public class EqNombreView extends View {
             float sum = 0f; int c = 0;
             for (int b = lo; b < hi && b < nb; b++) {
                 float dbfs = (float) (20.0 * Math.log10((magLin[b] + 0.001f) / ref));   // <= 0 (0 = tan fuerte como el pico)
-                float bv = (dbfs + 34f) / 34f;     // ventana de 34 dB (mas alto, llena como PC)
+                // TILT de agudos: la musica trae poca energia arriba; se levanta en dB (fisica correcta) para que NO mueran
+                dbfs += ((float) i / N) * 34f;
+                float bv = (dbfs + 40f) / 40f;     // ventana de 40 dB
                 if (bv < 0f) bv = 0f;
                 if (bv > 1f) bv = 1f;
                 sum += bv; c++;
             }
             float v = (c > 0) ? sum / c : 0f;
-            v *= (0.72f + 0.6f * ((float) i / N));   // reparto emparejado (medido: el grave dominaba en Android)
+            v *= (0.62f + 0.5f * ((float) i / N));   // reparto modesto (el tilt en dB ya empareja graves/agudos)
             if (v > 1f) v = 1f;
             vTmp[i] = v;
         }
@@ -243,24 +247,43 @@ public class EqNombreView extends View {
             for (int i = 0; i < N; i++) vTmp[i] = sonando ? (0.10f + rnd.nextFloat() * 0.75f) : 0.01f;
         }
 
-        // === BARRAS: exacto pintarBarras del PC ===
+        // === BARRAS con PICOS QUE CAEN (estilo equipo de musica) ===
         float by = y + (int) (46 * sc);
         float bx = x + 2;
         float bwidth = 190 * sc;
         pBar.setColor(color);
-        cv.drawRect(bx, by, bx + bwidth, by + 2 * sc, pBar);   // linea base (como PC)
+        cv.drawRect(bx, by, bx + bwidth, by + 2 * sc, pBar);   // linea base
         float step = bwidth / N;
-        float H = 60 * sc;                                     // alto de la tira
+        float H = 62 * sc;                                     // alto de la tira
+        float base = by + 2 * sc;
+        float barW = Math.max(1.5f, step * 0.62f);
+        int picoCol = (color & 0x00FFFFFF) | 0xFF000000;       // pico opaco del mismo color (mas claro)
+        int picoClaro = mezclar(color, 0xFFFFFFFF, 0.55f);     // punta mas clara para que resalte
         for (int i = 0; i < N; i++) {
-            float v = sonando ? vTmp[i] : 0.01f;               // pausado -> barras abajo (como PC)
-            // suavizado del PC: sube AL INSTANTE, baja 0.70/0.30 por cuadro
+            float v = sonando ? vTmp[i] : 0f;
+            // barra: sube al instante, baja suave
             if (v > eqSmooth[i]) eqSmooth[i] = v;
-            else eqSmooth[i] = eqSmooth[i] * 0.70f + v * 0.30f;
-            float bh = Math.max(2f, eqSmooth[i] * H * 0.82f);   // altura como PC (medido: PC 0.64 vs AN 0.31)
-            float barW = Math.max(1.5f, step * 0.62f);         // barras finas (exacto PC)
-            cv.drawRect(bx + i * step, by + 2 * sc, bx + i * step + barW, by + 2 * sc + bh, pBar);
+            else eqSmooth[i] = eqSmooth[i] * 0.72f + v * 0.28f;
+            float bh = eqSmooth[i] * H;
+            if (bh < 1f) bh = 1f;
+            // dibujar la barra (hacia abajo desde la linea)
+            pBar.setColor(color);
+            cv.drawRect(bx + i * step, base, bx + i * step + barW, base + bh, pBar);
+            // PICO que cae: si la barra sube mas que el pico, el pico salta arriba; si no, el pico cae acelerando
+            if (bh >= picoCae[i]) { picoCae[i] = bh; picoVel[i] = 0f; }
+            else {
+                picoVel[i] += 0.35f * sc;          // gravedad (acelera)
+                picoCae[i] -= picoVel[i];
+                if (picoCae[i] < 0f) picoCae[i] = 0f;
+            }
+            // dibujar el pico (una rayita separada de la barra)
+            float py = base + picoCae[i];
+            pBar.setColor(picoClaro);
+            cv.drawRect(bx + i * step, py + 2f * sc, bx + i * step + barW, py + 2f * sc + 2.5f * sc, pBar);
         }
-        if (activo && sonando) postInvalidateDelayed(16);      // ~60 cuadros/seg (como requestAnimationFrame)
+        pBar.setColor(color);
+        if (activo && sonando) postInvalidateDelayed(16);      // ~60 cuadros/seg
+        else if (activo) postInvalidateDelayed(50);            // pausado: dejar caer los picos suavemente
     }
 
     private float ajustarSize(String t, float base, float min, float maxW) {
@@ -275,6 +298,12 @@ public class EqNombreView extends View {
         if (pText.measureText(t) <= maxW) return t;
         while (t.length() > 1 && pText.measureText(t + "...") > maxW) t = t.substring(0, t.length() - 1);
         return t + "...";
+    }
+    private int mezclar(int c1, int c2, float t) {
+        int r = (int) (((c1 >> 16) & 0xFF) * (1 - t) + ((c2 >> 16) & 0xFF) * t);
+        int g = (int) (((c1 >> 8) & 0xFF) * (1 - t) + ((c2 >> 8) & 0xFF) * t);
+        int b = (int) ((c1 & 0xFF) * (1 - t) + (c2 & 0xFF) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
     private String upper(String s) { try { return s.toUpperCase(); } catch (Exception e) { return s; } }
 }
