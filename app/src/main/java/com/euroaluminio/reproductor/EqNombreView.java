@@ -50,16 +50,15 @@ public class EqNombreView extends View {
             float mag = (cnt > 0) ? sum / cnt : 0;
             // suavizado interno como el navegador (smoothingTimeConstant 0.62) -> movimiento natural
             magSmooth[i] = magSmooth[i] * 0.62f + mag * 0.38f;
-            float dbi = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
-            if (dbi > maxMag) maxMag = dbi;
         }
-        // pico en DECIBELES adaptado a la cancion: los dB comprimen la diferencia graves/agudos -> parejo y bailando como PC (sin escalera)
-        picoGlobal = Math.max(maxMag, picoGlobal * 0.995f);
-        if (picoGlobal < 14f) picoGlobal = 14f;
+        // CADA BARRA con su PROPIO pico (cada instrumento con su propia sensibilidad):
+        // el bajo mueve las de la izquierda, la voz las del medio, los platillos las de la derecha.
+        // Es la forma robusta de que TODAS bailen con este radio (su audio viene en 8 bits, rango corto).
         for (int i = 0; i < N; i++) {
-            float dbi = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
-            float v = (dbi - (picoGlobal - 24f)) / 24f;   // ventana de 24 dB bajo el pico de la cancion
-            v *= (0.5f + 1.0f * ((float) i / N));          // reparto EXACTO del PC
+            pico[i] = Math.max(magSmooth[i], pico[i] * 0.985f);   // pico por banda, baja lento (se adapta a la cancion)
+            if (pico[i] < 5f) pico[i] = 5f;
+            float v = magSmooth[i] / pico[i];                      // 0..1 relativo a SU banda -> cada barra viva
+            if (magSmooth[i] < 1.3f) v *= (magSmooth[i] / 1.3f);   // compuerta: en silencio la barra cae (no se mueve sola)
             if (v > 1f) v = 1f;
             if (v < 0f) v = 0f;
             target[i] = v;
