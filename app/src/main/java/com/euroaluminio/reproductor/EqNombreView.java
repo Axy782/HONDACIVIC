@@ -37,14 +37,16 @@ public class EqNombreView extends View {
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
-        float fMin = 2f, fMax = bins - 1f;
+        float fMin = 1f, fMax = bins - 1f;
         float maxNivel = 0f;
         for (int i = 0; i < N; i++) {
-            // rango de frecuencias de ESTA barra (logaritmico: las graves ocupan pocas, las agudas muchas)
+            // rango logaritmico, pero muestreando CRUDO (max 2 bins por barra, como el PC ~1 bin):
+            // asi cada barra trae su dato crudo y queda PICUDA (medido: el promedio de muchos bins alisaba)
             int lo = (int) (fMin * Math.pow(fMax / fMin, (float) i / N));
             int hi = (int) (fMin * Math.pow(fMax / fMin, (float) (i + 1) / N));
             if (lo < 1) lo = 1;
             if (hi <= lo) hi = lo + 1;
+            if (hi > lo + 2) hi = lo + 2;
             if (hi > bins) hi = bins;
             // PICO (maximo) de la banda -> conserva el golpe, no lo lava como el promedio
             float mx = 0f;
@@ -58,9 +60,9 @@ public class EqNombreView extends View {
             // a decibeles (perceptual)
             float dbRaw = (float) (20.0 * Math.log10(mx + 1.0));
             // COMPENSACION FUERTE de agudos (medido contra PC: la derecha estaba muerta, en PC es de lo MAS alto)
-            float db = dbRaw + ((float) i / N) * 22f - 5f;
-            // suavizado MINIMO (medido: Android iba al 63% de la velocidad del PC)
-            magSmooth[i] = magSmooth[i] * 0.22f + db * 0.78f;
+            float db = dbRaw + ((float) i / N) * 26f;
+            // suavizado MINIMO (medido contra PC)
+            magSmooth[i] = magSmooth[i] * 0.15f + db * 0.85f;
             if (dbRaw < 8f) magSmooth[i] = Math.min(magSmooth[i], db * (dbRaw / 8f));  // banda muda de verdad = abajo
             if (magSmooth[i] > maxNivel) maxNivel = magSmooth[i];
         }
@@ -80,7 +82,7 @@ public class EqNombreView extends View {
         energia /= N;
         // LATIDO COMUN (medido en PC): con cada golpe TODAS las barras respiran juntas + su movimiento propio
         if (energia > energiaS) energiaS = energia; else energiaS = energiaS * 0.80f + energia * 0.20f;
-        float latido = 0.45f + 0.55f * Math.min(1f, energiaS * 1.6f);
+        float latido = 0.55f + 0.45f * Math.min(1f, energiaS * 1.6f);
         for (int i = 0; i < N; i++) target[i] *= latido;
         if (activo) postInvalidate();
     }
@@ -95,7 +97,7 @@ public class EqNombreView extends View {
     public void setInfo(String art, String can) {
         String a = (art == null) ? "" : art.trim();
         String c = (can == null) ? "" : can.trim();
-        if (a.equalsIgnoreCase("Desconocido")) a = "";
+        if (a.equalsIgnoreCase("Desconocido") || a.equalsIgnoreCase("<unknown>") || a.equalsIgnoreCase("unknown")) a = "";
         // regla del PC: si no hay artista y el nombre tiene " - ", se divide (primera parte arriba, resto abajo)
         if (a.length() == 0 && c.indexOf(" - ") >= 0) {
             int q = c.indexOf(" - ");
@@ -135,7 +137,7 @@ public class EqNombreView extends View {
 
         // Texto como el PC: letra GRUESA + SOMBRA suave real debajo (relieve lindo, no sombra cutre)
         pText.setFakeBoldText(true);
-        pText.setShadowLayer(5f * sc, 0, 2.5f * sc, 0xD9000000);
+        pText.setShadowLayer(6f * sc, 0, 3f * sc, 0xE6000000);
         // artista (BLANCO, arriba, como PC)
         pText.setColor(0xFFFFFFFF);
         pText.setTextSize(szA);
@@ -162,7 +164,7 @@ public class EqNombreView extends View {
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
             if (target[i] > h[i]) h[i] = target[i];                       // sube al instante
-            else h[i] = h[i] * 0.52f + target[i] * 0.48f;                 // baja rapida (velocidad medida del PC)
+            else h[i] = h[i] * 0.45f + target[i] * 0.55f;                 // baja rapida (velocidad medida del PC)
             float bh = h[i] * 42 * sc + 1.5f;                            // tira compacta (como PC)
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }

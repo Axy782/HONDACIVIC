@@ -1997,10 +1997,10 @@ public class MainActivity extends Activity {
             android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
             float cx = size/2f, cy = size/2f, r = size * 0.455f;   // margen para la sombra (flota como PC)
             // ===== SOMBRA suave alrededor: CENTRADA y simetrica (a prueba de giro, sin cortes) =====
-            android.graphics.RadialGradient somb = new android.graphics.RadialGradient(cx, cy, r*1.095f,
-                new int[]{0x9E000000, 0x9E000000, 0x00000000}, new float[]{0f, 0.88f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            android.graphics.RadialGradient somb = new android.graphics.RadialGradient(cx, cy, r*1.07f,
+                new int[]{0x6E000000, 0x6E000000, 0x00000000}, new float[]{0f, 0.90f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(somb);
-            cv.drawCircle(cx, cy, r*1.095f, p); p.setShader(null);
+            cv.drawCircle(cx, cy, r*1.07f, p); p.setShader(null);
             // ===== VINILO =====
             p.setColor(0xFF050505);
             cv.drawCircle(cx, cy, r, p);
