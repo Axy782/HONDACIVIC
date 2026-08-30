@@ -556,7 +556,7 @@ public class MainActivity extends Activity {
         vizBg = (VisualizerView) findViewById(R.id.vizBg);
         if (vizBg != null) { vizBg.setTipo(1); vizBg.setColor(accent); }
         eqNombre = (EqNombreView) findViewById(R.id.eqNombre);
-        if (eqNombre != null) eqNombre.setColor(0xFFFFC107);
+        if (eqNombre != null) eqNombre.setColor(accent);   // color VIVO del tema (mamey), no amarillo palido
         discoView = (DiscoView) findViewById(R.id.discoView);
         discoImg = (android.widget.ImageView) findViewById(R.id.discoImg);
         letrasTexto = (android.widget.TextView) findViewById(R.id.letrasTexto);
@@ -1995,41 +1995,56 @@ public class MainActivity extends Activity {
             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
             android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            float cx = size/2f, cy = size/2f, r = size/2f - 4;
-            // base del vinilo (#050505 como PC)
-            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF050505);
+            float cx = size/2f, cy = size/2f, r = size * 0.47f;   // margen para la sombra (flota como PC)
+            // ===== SOMBRA suave debajo (el disco FLOTA como en PC) =====
+            p.setStyle(android.graphics.Paint.Style.FILL);
+            try { p.setMaskFilter(new android.graphics.BlurMaskFilter(size*0.045f, android.graphics.BlurMaskFilter.Blur.NORMAL)); } catch (Exception e) {}
+            p.setColor(0xB8000000);
+            cv.drawCircle(cx, cy + size*0.020f, r, p);
+            p.setMaskFilter(null);
+            // ===== VINILO =====
+            p.setColor(0xFF050505);
             cv.drawCircle(cx, cy, r, p);
-            // centro un poco mas claro (#2a2a2a -> #0c0c0c como PC)
             android.graphics.RadialGradient rg = new android.graphics.RadialGradient(cx, cy, r,
-                new int[]{0xFF262626, 0xFF0C0C0C, 0xFF050505}, new float[]{0f, 0.34f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+                new int[]{0xFF262626, 0xFF0C0C0C, 0xFF060606}, new float[]{0f, 0.34f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setShader(rg); cv.drawCircle(cx, cy, r, p); p.setShader(null);
-            // SURCOS finos que cubren TODO el disco (como PC: anillos cada ~3px)
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x16FFFFFF);
+            // surcos finos
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x11FFFFFF);
             for (float rr = r; rr > r*0.13f; rr -= 3f) cv.drawCircle(cx, cy, rr, p);
-            // DOS reflejos de luz OPUESTOS (como vinilo real cuando la luz le pega)
-            android.graphics.SweepGradient sw = new android.graphics.SweepGradient(cx, cy,
-                new int[]{0x00FFFFFF, 0x22FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x1CFFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF},
-                new float[]{0f, 0.12f, 0.26f, 0.5f, 0.62f, 0.76f, 0.9f, 1f});
-            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(sw); cv.drawCircle(cx, cy, r, p); p.setShader(null);
-            // brillo diagonal tipo saten (::before del PC) -> le da el look real
+            // LUZ DIFUSA desde arriba-izquierda (suave y gradual, como PC; sin parches)
+            android.graphics.RadialGradient luz = new android.graphics.RadialGradient(cx - r*0.75f, cy - r*0.75f, r*2.3f,
+                new int[]{0x34FFFFFF, 0x00FFFFFF}, new float[]{0f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(luz); cv.drawCircle(cx, cy, r, p); p.setShader(null);
+            // saten diagonal suave
             android.graphics.LinearGradient sheen = new android.graphics.LinearGradient(cx-r, cy-r, cx+r, cy+r,
-                new int[]{0x2AFFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x0EFFFFFF}, new float[]{0f, 0.35f, 0.65f, 1f}, android.graphics.Shader.TileMode.CLAMP);
-            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(sheen); cv.drawCircle(cx, cy, r, p); p.setShader(null);
-            // brillo puntual suave arriba-izquierda (radial 38% 32% del PC)
-            android.graphics.RadialGradient spot = new android.graphics.RadialGradient(cx-r*0.24f, cy-r*0.36f, r*0.30f,
-                new int[]{0x24FFFFFF, 0x00FFFFFF}, new float[]{0f, 1f}, android.graphics.Shader.TileMode.CLAMP);
-            p.setShader(spot); cv.drawCircle(cx, cy, r, p); p.setShader(null);
-            // borde interno sutil (inset ring del PC)
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1.5f); p.setColor(0x10FFFFFF);
+                new int[]{0x20FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x12FFFFFF}, new float[]{0f, 0.35f, 0.68f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setShader(sheen); cv.drawCircle(cx, cy, r, p); p.setShader(null);
+            // vignette del borde (profundidad)
+            android.graphics.RadialGradient vg = new android.graphics.RadialGradient(cx, cy, r,
+                new int[]{0x00000000, 0x00000000, 0x6E000000}, new float[]{0f, 0.82f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setShader(vg); cv.drawCircle(cx, cy, r, p); p.setShader(null);
+            // brillo fino del aro en el lado de la luz
+            android.graphics.RectF aroRect = new android.graphics.RectF(cx-r*0.99f, cy-r*0.99f, cx+r*0.99f, cy+r*0.99f);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(size*0.010f);
+            try { p.setMaskFilter(new android.graphics.BlurMaskFilter(size*0.010f, android.graphics.BlurMaskFilter.Blur.NORMAL)); } catch (Exception e) {}
+            p.setColor(0x48FFFFFF);
+            cv.drawArc(aroRect, 180f, 90f, false, p);
+            p.setMaskFilter(null);
+            // borde interno sutil
+            p.setStrokeWidth(1.5f); p.setColor(0x14FFFFFF);
             cv.drawCircle(cx, cy, r-1, p);
-            float lr = r*0.40f;   // etiqueta (40% como PC)
+            // ===== ETIQUETA =====
+            float lr = r*0.40f;
+            // sombrita de la etiqueta (como PC)
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0x5A000000);
+            cv.drawCircle(cx, cy + size*0.006f, lr + size*0.012f, p);
             if (cover != null && !cover.isRecycled()){
                 android.graphics.Path path = new android.graphics.Path(); path.addCircle(cx, cy, lr, android.graphics.Path.Direction.CW);
                 cv.save(); cv.clipPath(path);
                 android.graphics.Rect src = new android.graphics.Rect(0,0,cover.getWidth(),cover.getHeight());
                 android.graphics.RectF dst = new android.graphics.RectF(cx-lr, cy-lr, cx+lr, cy+lr);
                 p.setStyle(android.graphics.Paint.Style.FILL);
-                p.setColor(0xFFFFFFFF);   // IMPORTANTE: pincel a alpha LLENO (el aro anterior lo dejaba al 6% y la caratula salia fantasma/opaca)
+                p.setColor(0xFFFFFFFF);   // IMPORTANTE: pincel a alpha LLENO (la caratula sale nitida, no fantasma)
                 p.setFilterBitmap(true);
                 cv.drawBitmap(cover, src, dst, p);
                 cv.restore();
@@ -2039,17 +2054,18 @@ public class MainActivity extends Activity {
                 p.setColor(0xFF111111); p.setTextAlign(android.graphics.Paint.Align.CENTER);
                 p.setTextSize(lr*0.5f); p.setFakeBoldText(true);
                 cv.drawText("JFV", cx, cy + lr*0.18f, p);
+                p.setFakeBoldText(false); p.setTextAlign(android.graphics.Paint.Align.LEFT);
             }
-            // aro negro alrededor de la etiqueta (box-shadow del PC)
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(size*0.010f); p.setColor(0x99000000);
+            // aro oscuro MARCADO (como PC) + aro blanco fino
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(size*0.012f); p.setColor(0xBE000000);
             cv.drawCircle(cx, cy, lr + size*0.006f, p);
-            p.setStrokeWidth(size*0.004f); p.setColor(0x2EFFFFFF);
+            p.setStrokeWidth(size*0.004f); p.setColor(0x37FFFFFF);
             cv.drawCircle(cx, cy, lr, p);
             // hueco central
-            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF0A0A0A);
-            cv.drawCircle(cx, cy, size*0.014f, p);
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(0x40FFFFFF);
-            cv.drawCircle(cx, cy, size*0.014f, p);
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF0C0C0C);
+            cv.drawCircle(cx, cy, size*0.013f, p);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(0x50FFFFFF);
+            cv.drawCircle(cx, cy, size*0.013f, p);
             discoBmpCache = bmp; discoCacheKey = key;
             return bmp;
         } catch (Throwable t) { return null; }

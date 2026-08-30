@@ -124,23 +124,20 @@ public class EqNombreView extends View {
         float maxWa = w - (x + 26 * sc) - 8 * sc;
         float maxWc = w - x - 8 * sc;
         float szA = ajustarSize(uA, 22 * sc, 14 * sc, maxWa); uA = recortar(uA, szA, maxWa);
-        float szC = ajustarSize(uC, 30 * sc, 17 * sc, maxWc); uC = recortar(uC, szC, maxWc);
+        float szC = ajustarSize(uC, 31 * sc, 17 * sc, maxWc); uC = recortar(uC, szC, maxWc);
 
-        // sombra sutil para que se lea sobre cualquier carátula
-        pText.setColor(0xCC000000);
-        pText.setTextSize(szA);
-        cv.drawText(uA, x + (int) (28 * sc), y + 2, pText);
-        pText.setTextSize(szC);
-        cv.drawText(uC, x + 2, y + (int) (30 * sc) + 2, pText);
-
-        // artista (blanco)
+        // Texto como el PC: letra GRUESA + SOMBRA suave real debajo (relieve lindo, no sombra cutre)
+        pText.setFakeBoldText(true);
+        pText.setShadowLayer(5f * sc, 0, 2.5f * sc, 0xD9000000);
+        // artista (BLANCO, arriba, como PC)
         pText.setColor(0xFFFFFFFF);
         pText.setTextSize(szA);
         cv.drawText(uA, x + (int) (26 * sc), y, pText);
-        // canción (color)
+        // canción (color VIVO del tema, abajo, como PC)
         pText.setColor(color);
         pText.setTextSize(szC);
         cv.drawText(uC, x, y + (int) (30 * sc), pText);
+        pText.clearShadowLayer();
 
         // línea + barras hacia ABAJO
         float by = y + (int) (46 * sc);
