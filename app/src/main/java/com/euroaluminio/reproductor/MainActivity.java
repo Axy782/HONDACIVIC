@@ -1005,8 +1005,7 @@ public class MainActivity extends Activity {
                         // si estamos en modo Disco, rearmar el disco con la caratula NITIDA recien cargada (evita centro opaco/viejo)
                         if (efectoModo == 6 && discoImg != null) {
                             discoBmpCache = null; discoCacheKey = null;
-                            android.graphics.Bitmap nb = obtenerDiscoBitmap(portadaActualBmp);
-                            if (nb != null) discoImg.setImageBitmap(nb);
+                            rearmarDisco();
                         }
                         if (portada != null) {
                             imgArt.setImageBitmap(portada);
@@ -1963,8 +1962,7 @@ public class MainActivity extends Activity {
             boolean discoOn = (efectoModo == 6);
             if (discoImg != null) {
                 if (discoOn) {
-                    android.graphics.Bitmap bmp = obtenerDiscoBitmap(portadaActualBmp);
-                    if (bmp != null) discoImg.setImageBitmap(bmp);
+                    rearmarDisco();
                     discoImg.setVisibility(View.VISIBLE);
                     iniciarGiroDisco(sonando);
                 } else {
@@ -1988,11 +1986,11 @@ public class MainActivity extends Activity {
         } catch (Exception e) {}
     }
     // ===== DISCO GIRANDO (ImageView + animacion, confiable en Android viejo) =====
-    private android.graphics.Bitmap obtenerDiscoBitmap(android.graphics.Bitmap cover){
-        String key = (cover != null && !cover.isRecycled()) ? ("c" + cover.getWidth() + "x" + cover.getHeight() + "@" + System.identityHashCode(cover)) : "generico";
+    private android.graphics.Bitmap obtenerDiscoBitmap(android.graphics.Bitmap cover, int sizePedido){
+        int size = (sizePedido >= 120) ? sizePedido : 440;
+        String key = size + "|" + ((cover != null && !cover.isRecycled()) ? ("c" + cover.getWidth() + "x" + cover.getHeight() + "@" + System.identityHashCode(cover)) : "generico");
         if (discoBmpCache != null && key.equals(discoCacheKey)) return discoBmpCache;
         try {
-            int size = 700;
             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
             android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
@@ -2030,6 +2028,8 @@ public class MainActivity extends Activity {
                 android.graphics.Rect src = new android.graphics.Rect(0,0,cover.getWidth(),cover.getHeight());
                 android.graphics.RectF dst = new android.graphics.RectF(cx-lr, cy-lr, cx+lr, cy+lr);
                 p.setStyle(android.graphics.Paint.Style.FILL);
+                p.setColor(0xFFFFFFFF);   // IMPORTANTE: pincel a alpha LLENO (el aro anterior lo dejaba al 6% y la caratula salia fantasma/opaca)
+                p.setFilterBitmap(true);
                 cv.drawBitmap(cover, src, dst, p);
                 cv.restore();
             } else {
@@ -2052,6 +2052,30 @@ public class MainActivity extends Activity {
             discoBmpCache = bmp; discoCacheKey = key;
             return bmp;
         } catch (Throwable t) { return null; }
+    }
+    private void rearmarDisco(){
+        if (discoImg == null) return;
+        int vw = discoImg.getWidth(), vh = discoImg.getHeight();
+        int size = Math.min(vw, vh);
+        if (size < 120) {
+            // la vista aun no tiene tamano: armar provisional y rearmar al medirse (evita el moire por escalado)
+            android.graphics.Bitmap tmp = obtenerDiscoBitmap(portadaActualBmp, 440);
+            if (tmp != null) discoImg.setImageBitmap(tmp);
+            discoImg.post(new Runnable(){ public void run(){
+                try {
+                    int w2 = discoImg.getWidth(), h2 = discoImg.getHeight();
+                    int s2 = Math.min(w2, h2);
+                    if (s2 >= 120 && efectoModo == 6) {
+                        discoBmpCache = null; discoCacheKey = null;
+                        android.graphics.Bitmap nb = obtenerDiscoBitmap(portadaActualBmp, s2);
+                        if (nb != null) discoImg.setImageBitmap(nb);
+                    }
+                } catch (Exception e) {}
+            }});
+            return;
+        }
+        android.graphics.Bitmap bmp = obtenerDiscoBitmap(portadaActualBmp, size);
+        if (bmp != null) discoImg.setImageBitmap(bmp);
     }
     private void iniciarGiroDisco(boolean sonando){
         if (discoImg == null) return;

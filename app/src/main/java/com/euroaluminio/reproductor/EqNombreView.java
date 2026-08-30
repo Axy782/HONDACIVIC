@@ -34,8 +34,8 @@ public class EqNombreView extends View {
         tieneAudio = true;
         int bins = fft.length / 2;
         int usable = (int) (bins * 0.9f);
+        float maxMag = 0f;
         for (int i = 0; i < N; i++) {
-            // reparto PAREJO por bandas (promedio real, igual que en PC)
             int lo = i * usable / N + 1;
             int hi = (i + 1) * usable / N + 1;
             if (hi <= lo) hi = lo + 1;
@@ -50,10 +50,16 @@ public class EqNombreView extends View {
             float mag = (cnt > 0) ? sum / cnt : 0;
             // suavizado interno como el navegador (smoothingTimeConstant 0.62) -> movimiento natural
             magSmooth[i] = magSmooth[i] * 0.62f + mag * 0.38f;
-            // dB con ventana (imita getByteFrequencyData del PC: valor 0..1 natural)
-            float db = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
-            float v = (db - 10f) / (42f - 10f);
-            v *= (0.5f + 1.0f * ((float) i / N));        // reparto EXACTO del PC (graves menos, agudos mas)
+            float dbi = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
+            if (dbi > maxMag) maxMag = dbi;
+        }
+        // pico en DECIBELES adaptado a la cancion: los dB comprimen la diferencia graves/agudos -> parejo y bailando como PC (sin escalera)
+        picoGlobal = Math.max(maxMag, picoGlobal * 0.995f);
+        if (picoGlobal < 14f) picoGlobal = 14f;
+        for (int i = 0; i < N; i++) {
+            float dbi = (float) (20.0 * Math.log10(magSmooth[i] + 1.0));
+            float v = (dbi - (picoGlobal - 24f)) / 24f;   // ventana de 24 dB bajo el pico de la cancion
+            v *= (0.5f + 1.0f * ((float) i / N));          // reparto EXACTO del PC
             if (v > 1f) v = 1f;
             if (v < 0f) v = 0f;
             target[i] = v;
