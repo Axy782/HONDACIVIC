@@ -1995,13 +1995,12 @@ public class MainActivity extends Activity {
             android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
             android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            float cx = size/2f, cy = size/2f, r = size * 0.47f;   // margen para la sombra (flota como PC)
-            // ===== SOMBRA suave debajo (el disco FLOTA como en PC) =====
-            p.setStyle(android.graphics.Paint.Style.FILL);
-            try { p.setMaskFilter(new android.graphics.BlurMaskFilter(size*0.045f, android.graphics.BlurMaskFilter.Blur.NORMAL)); } catch (Exception e) {}
-            p.setColor(0xB8000000);
-            cv.drawCircle(cx, cy + size*0.020f, r, p);
-            p.setMaskFilter(null);
+            float cx = size/2f, cy = size/2f, r = size * 0.455f;   // margen para la sombra (flota como PC)
+            // ===== SOMBRA suave alrededor: CENTRADA y simetrica (a prueba de giro, sin cortes) =====
+            android.graphics.RadialGradient somb = new android.graphics.RadialGradient(cx, cy, r*1.095f,
+                new int[]{0x9E000000, 0x9E000000, 0x00000000}, new float[]{0f, 0.88f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(somb);
+            cv.drawCircle(cx, cy, r*1.095f, p); p.setShader(null);
             // ===== VINILO =====
             p.setColor(0xFF050505);
             cv.drawCircle(cx, cy, r, p);
@@ -2009,7 +2008,7 @@ public class MainActivity extends Activity {
                 new int[]{0xFF262626, 0xFF0C0C0C, 0xFF060606}, new float[]{0f, 0.34f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setShader(rg); cv.drawCircle(cx, cy, r, p); p.setShader(null);
             // surcos finos
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x11FFFFFF);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x15FFFFFF);
             for (float rr = r; rr > r*0.13f; rr -= 3f) cv.drawCircle(cx, cy, rr, p);
             // LUZ DIFUSA desde arriba-izquierda (suave y gradual, como PC; sin parches)
             android.graphics.RadialGradient luz = new android.graphics.RadialGradient(cx - r*0.75f, cy - r*0.75f, r*2.3f,
@@ -2023,15 +2022,8 @@ public class MainActivity extends Activity {
             android.graphics.RadialGradient vg = new android.graphics.RadialGradient(cx, cy, r,
                 new int[]{0x00000000, 0x00000000, 0x6E000000}, new float[]{0f, 0.82f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setShader(vg); cv.drawCircle(cx, cy, r, p); p.setShader(null);
-            // brillo fino del aro en el lado de la luz
-            android.graphics.RectF aroRect = new android.graphics.RectF(cx-r*0.99f, cy-r*0.99f, cx+r*0.99f, cy+r*0.99f);
-            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(size*0.010f);
-            try { p.setMaskFilter(new android.graphics.BlurMaskFilter(size*0.010f, android.graphics.BlurMaskFilter.Blur.NORMAL)); } catch (Exception e) {}
-            p.setColor(0x48FFFFFF);
-            cv.drawArc(aroRect, 180f, 90f, false, p);
-            p.setMaskFilter(null);
             // borde interno sutil
-            p.setStrokeWidth(1.5f); p.setColor(0x14FFFFFF);
+            p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1.5f); p.setColor(0x14FFFFFF);
             cv.drawCircle(cx, cy, r-1, p);
             // ===== ETIQUETA =====
             float lr = r*0.40f;
