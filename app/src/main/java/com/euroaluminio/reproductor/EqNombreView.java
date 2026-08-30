@@ -44,6 +44,78 @@ public class EqNombreView extends View {
     /** El reproductor nos presta el Visualizer para pedir el FFT directo cada cuadro (como hace el PC). */
     public void setVisualizer(android.media.audiofx.Visualizer v) { viz = v; }
 
+    // ===== FFT PROPIO EN FLOTANTES (la tecnica real del navegador) =====
+    // El FFT que entrega el radio es de 8 bits: una barra de agudos solo puede tomar 3-4 valores
+    // (escalones). El navegador calcula su FFT en flotantes desde la onda cruda -> continuo y fluido.
+    // Aqui hacemos LO MISMO: onda cruda (getWaveForm) + ventana Blackman + FFT flotante de 128 puntos.
+    private static final int NF = 128;
+    private static final float[] WIN = new float[NF];
+    private static final int[] REV = new int[NF];
+    static {
+        for (int i = 0; i < NF; i++) {
+            WIN[i] = (float) (0.42 - 0.5 * Math.cos(2 * Math.PI * i / (NF - 1)) + 0.08 * Math.cos(4 * Math.PI * i / (NF - 1)));
+            int r = 0, x = i;
+            for (int bb = 0; bb < 7; bb++) { r = (r << 1) | (x & 1); x >>= 1; }
+            REV[i] = r;
+        }
+    }
+    private final float[] fre = new float[NF];
+    private final float[] fim = new float[NF];
+
+    private boolean procesarOnda(byte[] wave) {
+        if (wave == null || wave.length < NF) return false;
+        int mn = 255, mx = 0;
+        for (int i = 0; i < NF; i++) { int s = wave[i] & 0xFF; if (s < mn) mn = s; if (s > mx) mx = s; }
+        if (mx - mn < 3) return false;   // onda plana: este radio no da onda util, usar respaldo
+        for (int i = 0; i < NF; i++) {
+            int s = (wave[i] & 0xFF) - 128;
+            fre[REV[i]] = s * WIN[i];
+            fim[REV[i]] = 0f;
+        }
+        for (int len = 2; len <= NF; len <<= 1) {
+            double ang = -2 * Math.PI / len;
+            float wr0 = (float) Math.cos(ang), wi0 = (float) Math.sin(ang);
+            for (int i = 0; i < NF; i += len) {
+                float wr = 1f, wi = 0f;
+                for (int j = 0; j < len / 2; j++) {
+                    int aa = i + j, b2 = i + j + len / 2;
+                    float xr = fre[b2] * wr - fim[b2] * wi;
+                    float xi = fre[b2] * wi + fim[b2] * wr;
+                    fre[b2] = fre[aa] - xr; fim[b2] = fim[aa] - xi;
+                    fre[aa] += xr; fim[aa] += xi;
+                    float nwr = wr * wr0 - wi * wi0; wi = wr * wi0 + wi * wr0; wr = nwr;
+                }
+            }
+        }
+        int nb = NF / 2;   // 64 bandas, igual que el PC (fftSize 128)
+        // suavizado temporal 0.62 en magnitudes LINEALES (lo que Web Audio hace por dentro)
+        for (int k = 1; k < nb && k < magLin.length; k++) {
+            float m = (float) Math.sqrt(fre[k] * fre[k] + fim[k] * fim[k]);
+            magLin[k] = magLin[k] * 0.62f + m * 0.38f;
+        }
+        // barras EXACTO como pintarBarras del PC, con dB flotantes (ventana tipo [-100,-30] del navegador)
+        float ref = 3400f;                 // magnitud de un tono a todo volumen (referencia 0 dBFS)
+        int usable = (int) Math.floor(nb * 0.9f);
+        for (int i = 0; i < N; i++) {
+            int lo = (i * usable) / N + 1;
+            int hi = ((i + 1) * usable) / N + 1;
+            if (hi <= lo) hi = lo + 1;
+            float sum = 0f; int c = 0;
+            for (int b = lo; b < hi && b < nb; b++) {
+                float dbfs = (float) (20.0 * Math.log10((magLin[b] + 0.001f) / ref));   // <= 0
+                float bv = (dbfs + 70f) / 58f;     // ventana [-70,-12] dBFS -> 0..1
+                if (bv < 0f) bv = 0f;
+                if (bv > 1f) bv = 1f;
+                sum += bv; c++;
+            }
+            float v = (c > 0) ? sum / c : 0f;
+            v *= (0.5f + 1.0f * ((float) i / N));   // reparto exacto del PC
+            if (v > 1f) v = 1f;
+            vTmp[i] = v;
+        }
+        return true;
+    }
+
     /** Respaldo: si no hay Visualizer directo, aceptar datos empujados por el listener. */
     public void setFft(byte[] fft) {
         if (viz != null) return;                 // con acceso directo, este camino no hace falta
@@ -141,13 +213,23 @@ public class EqNombreView extends View {
 
         // === PEDIR DATOS FRESCOS ESTE CUADRO (la tecnica del PC: 60 veces por segundo) ===
         if (sonando && viz != null) {
+            boolean ok = false;
             try {
                 int cs = viz.getCaptureSize();
                 if (buf == null || buf.length != cs) buf = new byte[cs];
-                viz.getFft(buf);
-                procesar(buf);
-                tieneAudio = true;
+                viz.getWaveForm(buf);
+                ok = procesarOnda(buf);          // FFT PROPIO en flotantes (continuo y fluido, como el navegador)
             } catch (Throwable t) {}
+            if (!ok) {
+                try {
+                    int cs = viz.getCaptureSize();
+                    if (buf == null || buf.length != cs) buf = new byte[cs];
+                    viz.getFft(buf);
+                    procesar(buf);               // respaldo: FFT de 8 bits del radio
+                    ok = true;
+                } catch (Throwable t) {}
+            }
+            if (ok) tieneAudio = true;
         }
         long now = System.currentTimeMillis();
         if (!tieneAudio && now - lastT > 60) {    // respaldo: si el radio no da FFT, animacion por tiempo
