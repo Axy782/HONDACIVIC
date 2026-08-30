@@ -193,12 +193,22 @@ public class MainActivity extends Activity {
                         || n.endsWith(".webm") || n.endsWith(".avi") || n.endsWith(".mov")) {
                         return carpetaVideos();   // los videos van a la carpeta Videos
                     }
+                    if (n.endsWith(".apk") || n.endsWith(".zip") || n.endsWith(".pdf") || n.endsWith(".txt")
+                        || n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".rar")
+                        || n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".xls") || n.endsWith(".xlsx")) {
+                        return carpetaArchivos();  // APK y otros archivos van a la carpeta Archivos
+                    }
                     return carpetaDescarga();     // la música va a Descarga
                 }
                 public void archivoRecibido(String nombre) {
+                    final String nom = (nombre == null) ? "" : nombre;
+                    String ln = nom.toLowerCase(java.util.Locale.US);
+                    final boolean noMusica = ln.endsWith(".apk")||ln.endsWith(".zip")||ln.endsWith(".pdf")||ln.endsWith(".txt")
+                        ||ln.endsWith(".rar")||ln.endsWith(".jpg")||ln.endsWith(".jpeg")||ln.endsWith(".png")
+                        ||ln.endsWith(".doc")||ln.endsWith(".docx")||ln.endsWith(".xls")||ln.endsWith(".xlsx");
                     runOnUiThread(new Runnable() { public void run() {
-                        Toast.makeText(MainActivity.this, "Recibido: " + nombre, Toast.LENGTH_SHORT).show();
-                        escanearMusica();
+                        Toast.makeText(MainActivity.this, "Recibido: " + nom, Toast.LENGTH_SHORT).show();
+                        if (!noMusica) escanearMusica();   // solo re-escanear si es musica/video
                     }});
                 }
             });
@@ -755,6 +765,18 @@ public class MainActivity extends Activity {
         } catch (Exception e) {}
         if (d == null) { try { d = new File(Environment.getExternalStorageDirectory(), "Videos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
         if (d == null || !d.exists()) { try { d = new File(getExternalFilesDir(null), "Videos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
+        return d;
+    }
+
+    private File carpetaArchivos() {
+        File d = null;
+        try {
+            String usb = carpetaVinculada;
+            if (usb == null) usb = detectarRutaUsb();
+            if (usb != null) { File f = new File(usb, "Archivos"); if (!f.exists()) f.mkdirs(); if (f.exists() && f.canWrite()) d = f; }
+        } catch (Exception e) {}
+        if (d == null) { try { d = new File(Environment.getExternalStorageDirectory(), "Archivos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
+        if (d == null || !d.exists()) { try { d = new File(getExternalFilesDir(null), "Archivos"); if (!d.exists()) d.mkdirs(); } catch (Exception e) {} }
         return d;
     }
 
