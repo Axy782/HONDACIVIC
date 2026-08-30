@@ -2018,6 +2018,13 @@ public class MainActivity extends Activity {
             android.graphics.LinearGradient sheen = new android.graphics.LinearGradient(cx-r, cy-r, cx+r, cy+r,
                 new int[]{0x20FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x12FFFFFF}, new float[]{0f, 0.35f, 0.68f, 1f}, android.graphics.Shader.TileMode.CLAMP);
             p.setShader(sheen); cv.drawCircle(cx, cy, r, p); p.setShader(null);
+            // MANCHAS suaves de luz blanca sobre el vinilo (como el PC: satinado natural)
+            android.graphics.RadialGradient m1 = new android.graphics.RadialGradient(cx + r*0.45f, cy - r*0.05f, r*0.38f,
+                new int[]{0x16FFFFFF, 0x00FFFFFF}, new float[]{0f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setShader(m1); cv.drawCircle(cx, cy, r, p); p.setShader(null);
+            android.graphics.RadialGradient m2 = new android.graphics.RadialGradient(cx - r*0.05f, cy + r*0.55f, r*0.36f,
+                new int[]{0x12FFFFFF, 0x00FFFFFF}, new float[]{0f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            p.setShader(m2); cv.drawCircle(cx, cy, r, p); p.setShader(null);
             // vignette del borde (profundidad)
             android.graphics.RadialGradient vg = new android.graphics.RadialGradient(cx, cy, r,
                 new int[]{0x00000000, 0x00000000, 0x6E000000}, new float[]{0f, 0.82f, 1f}, android.graphics.Shader.TileMode.CLAMP);
@@ -2355,6 +2362,7 @@ public class MainActivity extends Activity {
     private void attachVisualizer() {
         try {
             if (visualizer != null) {
+                try { if (eqNombre != null) eqNombre.setVisualizer(null); } catch (Exception e) {}
                 try { visualizer.setEnabled(false); } catch (Exception e) {}
                 try { visualizer.release(); } catch (Exception e) {}
                 visualizer = null;
@@ -2362,7 +2370,7 @@ public class MainActivity extends Activity {
             if (mp == null) return;
             visualizer = new Visualizer(mp.getAudioSessionId());
             int[] rango = Visualizer.getCaptureSizeRange();
-            int cap = 256; if (cap < rango[0]) cap = rango[0]; if (cap > rango[1]) cap = rango[1];
+            int cap = 128; if (cap < rango[0]) cap = rango[0]; if (cap > rango[1]) cap = rango[1];   // 64 bandas, igual que el PC (fftSize 128)
             visualizer.setCaptureSize(cap);
             int rate = (Visualizer.getMaxCaptureRate() * 3) / 4;
             visualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
@@ -2370,6 +2378,7 @@ public class MainActivity extends Activity {
                 public void onFftDataCapture(Visualizer v, byte[] data, int r) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }
             }, rate, false, true);
             visualizer.setEnabled(true);
+            try { if (eqNombre != null) eqNombre.setVisualizer(visualizer); } catch (Exception e) {}   // acceso DIRECTO cada cuadro (tecnica del PC)
         } catch (Throwable t) { visualizer = null; }
     }
 
@@ -3781,6 +3790,7 @@ public class MainActivity extends Activity {
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}
         try { if (volObserver != null) getContentResolver().unregisterContentObserver(volObserver); } catch (Exception e) {}
+        try { if (eqNombre != null) eqNombre.setVisualizer(null); } catch (Exception e) {}
         try { if (visualizer != null) { try { visualizer.setEnabled(false); } catch (Exception e) {} visualizer.release(); } } catch (Exception e) {}
         try { if (vizBg != null) vizBg.parar(); } catch (Exception e) {}
         try { if (particles != null) particles.parar(); } catch (Exception e) {}
