@@ -257,8 +257,6 @@ public class EqNombreView extends View {
         float H = 62 * sc;                                     // alto de la tira
         float base = by + 2 * sc;
         float barW = Math.max(1.5f, step * 0.62f);
-        int picoCol = (color & 0x00FFFFFF) | 0xFF000000;       // pico opaco del mismo color (mas claro)
-        int picoClaro = mezclar(color, 0xFFFFFFFF, 0.55f);     // punta mas clara para que resalte
         for (int i = 0; i < N; i++) {
             float v = sonando ? vTmp[i] : 0f;
             // barra: sube al instante, baja suave
@@ -266,24 +264,13 @@ public class EqNombreView extends View {
             else eqSmooth[i] = eqSmooth[i] * 0.72f + v * 0.28f;
             float bh = eqSmooth[i] * H;
             if (bh < 1f) bh = 1f;
-            // dibujar la barra (hacia abajo desde la linea)
+            // dibujar la barra (hacia abajo desde la linea) - sin puntica
             pBar.setColor(color);
             cv.drawRect(bx + i * step, base, bx + i * step + barW, base + bh, pBar);
-            // PICO que cae: si la barra sube mas que el pico, el pico salta arriba; si no, el pico cae acelerando
-            if (bh >= picoCae[i]) { picoCae[i] = bh; picoVel[i] = 0f; }
-            else {
-                picoVel[i] += 0.35f * sc;          // gravedad (acelera)
-                picoCae[i] -= picoVel[i];
-                if (picoCae[i] < 0f) picoCae[i] = 0f;
-            }
-            // dibujar el pico (una rayita separada de la barra)
-            float py = base + picoCae[i];
-            pBar.setColor(picoClaro);
-            cv.drawRect(bx + i * step, py + 2f * sc, bx + i * step + barW, py + 2f * sc + 2.5f * sc, pBar);
         }
         pBar.setColor(color);
         if (activo && sonando) postInvalidateDelayed(16);      // ~60 cuadros/seg
-        else if (activo) postInvalidateDelayed(50);            // pausado: dejar caer los picos suavemente
+        else if (activo) postInvalidateDelayed(50);
     }
 
     private float ajustarSize(String t, float base, float min, float maxW) {
