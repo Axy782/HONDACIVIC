@@ -163,13 +163,13 @@ public class EqNombreView extends View {
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] = target[i];                       // sube al instante
-            else h[i] = h[i] * 0.45f + target[i] * 0.55f;                 // baja rapida (velocidad medida del PC)
+            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.50f;     // sube rapido pero INTERPOLADO (fluido, sin saltos)
+            else h[i] += (target[i] - h[i]) * 0.22f;                       // baja suave por cuadro (a 60fps = fluido como PC)
             float bh = h[i] * 42 * sc + 1.5f;                            // tira compacta (como PC)
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
         // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento
-        if (activo && sonando) postInvalidateDelayed(33);
+        if (activo && sonando) postInvalidateDelayed(16);   // ~60 cuadros/seg (fluido como el PC)
     }
 
     private float ajustarSize(String t, float base, float min, float maxW) {
