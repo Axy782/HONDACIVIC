@@ -26,7 +26,8 @@ public class EqNombreView extends View {
     private long lastT = 0;
     private final java.util.Random rnd = new java.util.Random();
     private boolean tieneAudio = false;   // true cuando llega FFT real
-    private float picoGlobal = 8f;         // para auto-ganancia (se adapta al volumen de la canción)
+    private float picoGlobal = 8f;
+    private float energiaS = 0f;   // energia global suavizada (latido comun con el ritmo)         // para auto-ganancia (se adapta al volumen de la canción)
 
     // ===== ECUALIZADOR NUEVO (desde cero): mapeo LOGARITMICO + PICO por banda =====
     // Clave para que se vea NATURAL como el PC: no promediar (eso aplana). Se toma el PICO de cada
@@ -54,27 +55,33 @@ public class EqNombreView extends View {
                 float m = (float) Math.sqrt(re * re + im * im);
                 if (m > mx) mx = m;
             }
-            // a decibeles (perceptual) + leve empuje a los agudos para que participen
-            float db = (float) (20.0 * Math.log10(mx + 1.0));
-            db += ((float) i / N) * 7f;
-            // suavizado ligero en el tiempo (estable pero responde al golpe)
-            magSmooth[i] = magSmooth[i] * 0.35f + db * 0.65f;
+            // a decibeles (perceptual)
+            float dbRaw = (float) (20.0 * Math.log10(mx + 1.0));
+            // COMPENSACION FUERTE de agudos (medido contra PC: la derecha estaba muerta, en PC es de lo MAS alto)
+            float db = dbRaw + ((float) i / N) * 22f - 5f;
+            // suavizado MINIMO (medido: Android iba al 63% de la velocidad del PC)
+            magSmooth[i] = magSmooth[i] * 0.22f + db * 0.78f;
+            if (dbRaw < 8f) magSmooth[i] = Math.min(magSmooth[i], db * (dbRaw / 8f));  // banda muda de verdad = abajo
             if (magSmooth[i] > maxNivel) maxNivel = magSmooth[i];
         }
-        // techo adaptado a la cancion, pero con PISO ALTO y bajada MUY lenta:
-        // en intros suaves las barras se ven PEQUENAS (natural), no amplificadas como un "viaje"
+        // techo adaptado a la cancion con piso alto (intros suaves = barras pequenas, sin "viaje")
         picoGlobal = Math.max(maxNivel, picoGlobal * 0.998f);
-        if (picoGlobal < 30f) picoGlobal = 30f;
-        float piso = picoGlobal - 26f;                 // ventana de 26 dB (relieve: fuertes altas, suaves bajas)
+        if (picoGlobal < 32f) picoGlobal = 32f;
+        float piso = picoGlobal - 24f;
         float rango = picoGlobal - piso;
+        float energia = 0f;
         for (int i = 0; i < N; i++) {
-            float v = (magSmooth[i] - piso) / rango;   // relieve natural (picudo y musical)
-            // compuerta ABSOLUTA: banda casi muda = barra casi cero (no baila con el ruidito)
-            if (magSmooth[i] < 12f) v *= (magSmooth[i] / 12f);
-            if (v < 0f) v = 0f;
-            if (v > 1f) v = 1f;
-            target[i] = v;
+            float nv = (magSmooth[i] - piso) / rango;
+            if (nv < 0f) nv = 0f;
+            if (nv > 1f) nv = 1f;
+            target[i] = nv;
+            energia += nv;
         }
+        energia /= N;
+        // LATIDO COMUN (medido en PC): con cada golpe TODAS las barras respiran juntas + su movimiento propio
+        if (energia > energiaS) energiaS = energia; else energiaS = energiaS * 0.80f + energia * 0.20f;
+        float latido = 0.45f + 0.55f * Math.min(1f, energiaS * 1.6f);
+        for (int i = 0; i < N; i++) target[i] *= latido;
         if (activo) postInvalidate();
     }
 
@@ -155,7 +162,7 @@ public class EqNombreView extends View {
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < N; i++) {
             if (target[i] > h[i]) h[i] = target[i];                       // sube al instante
-            else h[i] = h[i] * 0.62f + target[i] * 0.38f;                 // baja con caida visible (picudo, natural)
+            else h[i] = h[i] * 0.52f + target[i] * 0.48f;                 // baja rapida (velocidad medida del PC)
             float bh = h[i] * 42 * sc + 1.5f;                            // tira compacta (como PC)
             cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
         }
