@@ -1995,8 +1995,8 @@ public class MainActivity extends Activity {
             android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
             android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
             float cx = size/2f, cy = size/2f, r = size/2f - 4;
-            // base del vinilo (#050505 como PC)
-            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF050505);
+            // base del vinilo (negro profundo, rico)
+            p.setStyle(android.graphics.Paint.Style.FILL); p.setColor(0xFF030303);
             cv.drawCircle(cx, cy, r, p);
             // centro un poco mas claro (#2a2a2a -> #0c0c0c como PC)
             android.graphics.RadialGradient rg = new android.graphics.RadialGradient(cx, cy, r,
@@ -2021,6 +2021,12 @@ public class MainActivity extends Activity {
             // borde interno sutil (inset ring del PC)
             p.setStyle(android.graphics.Paint.Style.STROKE); p.setStrokeWidth(1.5f); p.setColor(0x10FFFFFF);
             cv.drawCircle(cx, cy, r-1, p);
+            // rim exterior con un toque del color del tema (le da vida y riqueza de color)
+            int rimCol = (accent & 0x00FFFFFF) | 0x33000000;
+            p.setStrokeWidth(size*0.010f); p.setColor(rimCol);
+            cv.drawCircle(cx, cy, r - size*0.008f, p);
+            p.setStrokeWidth(size*0.006f); p.setColor(0xE6000000);
+            cv.drawCircle(cx, cy, r - size*0.002f, p);
             float lr = r*0.40f;   // etiqueta (40% como PC)
             if (cover != null && !cover.isRecycled()){
                 android.graphics.Path path = new android.graphics.Path(); path.addCircle(cx, cy, lr, android.graphics.Path.Direction.CW);
@@ -2079,14 +2085,19 @@ public class MainActivity extends Activity {
     }
     private void iniciarGiroDisco(boolean sonando){
         if (discoImg == null) return;
-        if (!discoAnimando){
-            android.view.animation.RotateAnimation ra = new android.view.animation.RotateAnimation(
-                0f, 360f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
-            ra.setDuration(4000);
-            ra.setRepeatCount(android.view.animation.Animation.INFINITE);
-            ra.setInterpolator(new android.view.animation.LinearInterpolator());
-            discoImg.startAnimation(ra);
-            discoAnimando = true;
+        if (sonando) {
+            if (!discoAnimando){
+                android.view.animation.RotateAnimation ra = new android.view.animation.RotateAnimation(
+                    0f, 360f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+                ra.setDuration(4000);
+                ra.setRepeatCount(android.view.animation.Animation.INFINITE);
+                ra.setInterpolator(new android.view.animation.LinearInterpolator());
+                discoImg.startAnimation(ra);
+                discoAnimando = true;
+            }
+        } else {
+            // EN PAUSA: el disco se detiene (como un tocadiscos real)
+            if (discoAnimando) { discoImg.clearAnimation(); discoAnimando = false; }
         }
     }
     private void pararGiroDisco(){

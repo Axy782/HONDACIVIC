@@ -28,40 +28,48 @@ public class EqNombreView extends View {
     private boolean tieneAudio = false;   // true cuando llega FFT real
     private float picoGlobal = 8f;         // para auto-ganancia (se adapta al volumen de la canción)
 
-    // Recibe el análisis de frecuencias del audio y hace que las barras BAILEN con el ritmo
+    // ===== ECUALIZADOR NUEVO (desde cero): mapeo LOGARITMICO + PICO por banda =====
+    // Clave para que se vea NATURAL como el PC: no promediar (eso aplana). Se toma el PICO de cada
+    // banda y se reparten las frecuencias en escala logaritmica (como el oido), asi cada barra
+    // muestra su frecuencia con relieve -> barras picudas y desparejas que bailan con el ritmo.
     public void setFft(byte[] fft) {
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
-        int usable = (int) (bins * 0.9f);
-        float maxMag = 0f;
+        float fMin = 2f, fMax = bins - 1f;
+        float maxNivel = 0f;
         for (int i = 0; i < N; i++) {
-            int lo = i * usable / N + 1;
-            int hi = (i + 1) * usable / N + 1;
+            // rango de frecuencias de ESTA barra (logaritmico: las graves ocupan pocas, las agudas muchas)
+            int lo = (int) (fMin * Math.pow(fMax / fMin, (float) i / N));
+            int hi = (int) (fMin * Math.pow(fMax / fMin, (float) (i + 1) / N));
+            if (lo < 1) lo = 1;
             if (hi <= lo) hi = lo + 1;
             if (hi > bins) hi = bins;
-            float sum = 0; int cnt = 0;
+            // PICO (maximo) de la banda -> conserva el golpe, no lo lava como el promedio
+            float mx = 0f;
             for (int b = lo; b < hi; b++) {
                 int p = b * 2;
                 if (p + 1 >= fft.length) break;
                 float re = fft[p], im = fft[p + 1];
-                sum += (float) Math.sqrt(re * re + im * im); cnt++;
+                float m = (float) Math.sqrt(re * re + im * im);
+                if (m > mx) mx = m;
             }
-            float mag = (cnt > 0) ? sum / cnt : 0;
-            // suavizado LIGERO (responde rapido a los golpes, no se ve blandito)
-            magSmooth[i] = magSmooth[i] * 0.40f + mag * 0.60f;
+            // a decibeles (perceptual) + leve empuje a los agudos para que participen
+            float db = (float) (20.0 * Math.log10(mx + 1.0));
+            db += ((float) i / N) * 9f;
+            // suavizado ligero en el tiempo (estable pero responde al golpe)
+            magSmooth[i] = magSmooth[i] * 0.35f + db * 0.65f;
+            if (magSmooth[i] > maxNivel) maxNivel = magSmooth[i];
         }
-        // CADA BARRA con su PROPIO pico (cada instrumento con su propia sensibilidad):
-        // el bajo mueve las de la izquierda, la voz las del medio, los platillos las de la derecha.
-        // Es la forma robusta de que TODAS bailen con este radio (su audio viene en 8 bits, rango corto).
+        // auto-ganancia: el techo se adapta al volumen de la cancion (baja lento) -> siempre llena la altura
+        picoGlobal = Math.max(maxNivel, picoGlobal * 0.994f);
+        if (picoGlobal < 12f) picoGlobal = 12f;
+        float piso = picoGlobal - 26f;                 // ventana de 26 dB (da relieve: fuertes altas, suaves bajas)
+        float rango = picoGlobal - piso;
         for (int i = 0; i < N; i++) {
-            pico[i] = Math.max(magSmooth[i], pico[i] * 0.997f);   // pico por banda, baja MUY lento: conserva el relieve natural (picudo, no parejo)
-            if (pico[i] < 6f) pico[i] = 6f;
-            float v = magSmooth[i] / pico[i];                      // 0..1 relativo a SU banda -> cada barra viva y picuda
-            if (magSmooth[i] < 2.0f) v *= (magSmooth[i] / 2.0f);   // compuerta: en silencio la barra cae (no se mueve sola)
-            v = (float) Math.pow(v, 0.75);                         // realza un poco para que se vea con cuerpo
-            if (v > 1f) v = 1f;
+            float v = (magSmooth[i] - piso) / rango;   // relieve natural (no per-banda: se ve picudo y musical)
             if (v < 0f) v = 0f;
+            if (v > 1f) v = 1f;
             target[i] = v;
         }
         if (activo) postInvalidate();
