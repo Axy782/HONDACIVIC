@@ -16,7 +16,7 @@ public class EqNombreView extends View {
     private String artista = "", cancion = "";
     private int color = 0xFFFFC107;      // amarillo como el video
     private boolean activo = false, sonando = false;
-    private static final int N = 40;
+    private static final int N = 56;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
@@ -56,18 +56,21 @@ public class EqNombreView extends View {
             }
             // a decibeles (perceptual) + leve empuje a los agudos para que participen
             float db = (float) (20.0 * Math.log10(mx + 1.0));
-            db += ((float) i / N) * 9f;
+            db += ((float) i / N) * 7f;
             // suavizado ligero en el tiempo (estable pero responde al golpe)
             magSmooth[i] = magSmooth[i] * 0.35f + db * 0.65f;
             if (magSmooth[i] > maxNivel) maxNivel = magSmooth[i];
         }
-        // auto-ganancia: el techo se adapta al volumen de la cancion (baja lento) -> siempre llena la altura
-        picoGlobal = Math.max(maxNivel, picoGlobal * 0.994f);
-        if (picoGlobal < 12f) picoGlobal = 12f;
-        float piso = picoGlobal - 26f;                 // ventana de 26 dB (da relieve: fuertes altas, suaves bajas)
+        // techo adaptado a la cancion, pero con PISO ALTO y bajada MUY lenta:
+        // en intros suaves las barras se ven PEQUENAS (natural), no amplificadas como un "viaje"
+        picoGlobal = Math.max(maxNivel, picoGlobal * 0.998f);
+        if (picoGlobal < 30f) picoGlobal = 30f;
+        float piso = picoGlobal - 26f;                 // ventana de 26 dB (relieve: fuertes altas, suaves bajas)
         float rango = picoGlobal - piso;
         for (int i = 0; i < N; i++) {
-            float v = (magSmooth[i] - piso) / rango;   // relieve natural (no per-banda: se ve picudo y musical)
+            float v = (magSmooth[i] - piso) / rango;   // relieve natural (picudo y musical)
+            // compuerta ABSOLUTA: banda casi muda = barra casi cero (no baila con el ruidito)
+            if (magSmooth[i] < 12f) v *= (magSmooth[i] / 12f);
             if (v < 0f) v = 0f;
             if (v > 1f) v = 1f;
             target[i] = v;
