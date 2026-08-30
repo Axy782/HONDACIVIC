@@ -33,6 +33,7 @@ public class EqNombreView extends View {
     private android.media.audiofx.Visualizer viz = null;   // para pedir el FFT DIRECTO cada cuadro (tecnica PC)
     private byte[] buf = null;
     private final float[] vTmp = new float[N];             // valor crudo de cada barra en este cuadro
+    private float refAdapt = 1500f;                        // referencia auto-calibrable (se ajusta al nivel real del radio)
 
     public EqNombreView(Context c) { super(c); init(); }
     public EqNombreView(Context c, AttributeSet a) { super(c, a); init(); }
@@ -89,12 +90,17 @@ public class EqNombreView extends View {
         }
         int nb = NF / 2;   // 64 bandas, igual que el PC (fftSize 128)
         // suavizado temporal 0.62 en magnitudes LINEALES (lo que Web Audio hace por dentro)
+        float maxM = 0f;
         for (int k = 1; k < nb && k < magLin.length; k++) {
             float m = (float) Math.sqrt(fre[k] * fre[k] + fim[k] * fim[k]);
-            magLin[k] = magLin[k] * 0.62f + m * 0.38f;
+            magLin[k] = magLin[k] * 0.78f + m * 0.22f;   // mas calmado (medido: Android iba muy nervioso)
+            if (magLin[k] > maxM) maxM = magLin[k];
         }
-        // barras EXACTO como pintarBarras del PC, con dB flotantes (ventana tipo [-100,-30] del navegador)
-        float ref = 3400f;                 // magnitud de un tono a todo volumen (referencia 0 dBFS)
+        // REFERENCIA AUTO-CALIBRABLE: se pega al pico real del radio (sube rapido, baja muy lento)
+        if (maxM > refAdapt) refAdapt = refAdapt * 0.7f + maxM * 0.3f;
+        else refAdapt = refAdapt * 0.9995f + maxM * 0.0005f;
+        if (refAdapt < 200f) refAdapt = 200f;
+        float ref = refAdapt;
         int usable = (int) Math.floor(nb * 0.9f);
         for (int i = 0; i < N; i++) {
             int lo = (i * usable) / N + 1;
@@ -102,14 +108,14 @@ public class EqNombreView extends View {
             if (hi <= lo) hi = lo + 1;
             float sum = 0f; int c = 0;
             for (int b = lo; b < hi && b < nb; b++) {
-                float dbfs = (float) (20.0 * Math.log10((magLin[b] + 0.001f) / ref));   // <= 0
-                float bv = (dbfs + 70f) / 58f;     // ventana [-70,-12] dBFS -> 0..1
+                float dbfs = (float) (20.0 * Math.log10((magLin[b] + 0.001f) / ref));   // <= 0 (0 = tan fuerte como el pico)
+                float bv = (dbfs + 34f) / 34f;     // ventana de 34 dB (mas alto, llena como PC)
                 if (bv < 0f) bv = 0f;
                 if (bv > 1f) bv = 1f;
                 sum += bv; c++;
             }
             float v = (c > 0) ? sum / c : 0f;
-            v *= (0.5f + 1.0f * ((float) i / N));   // reparto exacto del PC
+            v *= (0.72f + 0.6f * ((float) i / N));   // reparto emparejado (medido: el grave dominaba en Android)
             if (v > 1f) v = 1f;
             vTmp[i] = v;
         }
@@ -250,7 +256,7 @@ public class EqNombreView extends View {
             // suavizado del PC: sube AL INSTANTE, baja 0.70/0.30 por cuadro
             if (v > eqSmooth[i]) eqSmooth[i] = v;
             else eqSmooth[i] = eqSmooth[i] * 0.70f + v * 0.30f;
-            float bh = Math.max(2f, eqSmooth[i] * H * 0.7f);   // altura moderada (exacto PC)
+            float bh = Math.max(2f, eqSmooth[i] * H * 0.82f);   // altura como PC (medido: PC 0.64 vs AN 0.31)
             float barW = Math.max(1.5f, step * 0.62f);         // barras finas (exacto PC)
             cv.drawRect(bx + i * step, by + 2 * sc, bx + i * step + barW, by + 2 * sc + bh, pBar);
         }
