@@ -366,6 +366,7 @@ public class MainActivity extends Activity {
     private final ArrayList<String> expItems = new ArrayList<String>();
     private final ArrayList<File> expDirs = new ArrayList<File>();
     private File expActual = null;
+    private boolean expEnRaices = false;   // true = mostrando lista de unidades (USB, interno)
     // Listas de reproducción
     private org.json.JSONObject listas = new org.json.JSONObject();  // nombre -> [rutas]
     private int tab = 0;   // 0 = carpetas, 1 = mis listas
@@ -882,6 +883,49 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void abrirExplorador() {
+        expEnRaices = true;
+        expActual = null;
+        pintarExplorador();
+        mostrarPane(3);
+    }
+    private ArrayList<File> unidadesDetectadas() {
+        LinkedHashSet<String> paths = new LinkedHashSet<String>();
+        try { paths.add(Environment.getExternalStorageDirectory().getAbsolutePath()); } catch (Exception e) {}
+        try { String sec = System.getenv("SECONDARY_STORAGE"); if (sec != null) for (String p : sec.split(":")) paths.add(p); } catch (Exception e) {}
+        try { String ext = System.getenv("EXTERNAL_STORAGE"); if (ext != null) paths.add(ext); } catch (Exception e) {}
+        String[] contenedores = { "/storage", "/mnt", "/mnt/media_rw", "/mnt/usb", "/mnt/usbhost", "/mnt/runtime/default" };
+        for (String cp : contenedores) {
+            try {
+                File cf = new File(cp);
+                if (cf.exists() && cf.isDirectory()) {
+                    File[] subs = cf.listFiles();
+                    if (subs != null) for (File s : subs) {
+                        try {
+                            String nn = s.getName().toLowerCase(java.util.Locale.US);
+                            if (s.isDirectory() && s.canRead() && !nn.equals("self") && !nn.equals("emulated") && !nn.startsWith(".")) paths.add(s.getAbsolutePath());
+                        } catch (Exception e) {}
+                    }
+                }
+            } catch (Exception e) {}
+        }
+        String[] comunes = { "/mnt/usb_storage", "/mnt/sdcard/usbStorage", "/udisk", "/mnt/udisk", "/mnt/sda1", "/mnt/ext_sdcard" };
+        for (String p : comunes) paths.add(p);
+        ArrayList<File> r = new ArrayList<File>();
+        for (String p : paths) {
+            try { File fi = new File(p); if (fi.exists() && fi.isDirectory() && fi.canRead()) r.add(fi); } catch (Exception e) {}
+        }
+        return r;
+    }
+    private String etiquetaUnidad(File f) {
+        String p = f.getAbsolutePath().toLowerCase(java.util.Locale.US);
+        String nombre = f.getName();
+        String interno = "";
+        try { interno = Environment.getExternalStorageDirectory().getAbsolutePath().toLowerCase(java.util.Locale.US); } catch (Exception e) {}
+        if (p.contains("emulated") || p.equals(interno)) return "[MEMORIA INTERNA]  " + f.getAbsolutePath();
+        if (p.contains("usb") || p.contains("media_rw") || p.contains("sda") || p.contains("udisk")) return "[USB]  " + nombre + "   (" + f.getAbsolutePath() + ")";
+        return "[UNIDAD]  " + nombre + "   (" + f.getAbsolutePath() + ")";
+    }
     private ArrayList<File> raicesBase() {
         LinkedHashSet<String> paths = new LinkedHashSet<String>();
         try { paths.add(Environment.getExternalStorageDirectory().getAbsolutePath()); } catch (Exception e) {}
