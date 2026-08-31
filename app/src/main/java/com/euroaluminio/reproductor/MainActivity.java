@@ -1089,13 +1089,13 @@ public class MainActivity extends Activity {
         Button ba = (Button) findViewById(R.id.btnAleatCarpeta);
         View tabsRow = findViewById(R.id.tabsRow);
         if (modo == 0) {
-            btnVolver.setText("< Reproduciendo");
+            btnVolver.setText("\u2039 Menú principal");
             if (tab == 0) txtCount.setText(carpetas.isEmpty() ? "No se encontró música (revisa el USB)" : (carpetas.size() + " carpetas"));
             else txtCount.setText(nombresListas.size() + " listas");
             br.setVisibility(View.GONE); ba.setVisibility(View.GONE);
             tabsRow.setVisibility(View.VISIBLE);
         } else {
-            btnVolver.setText(carpetaAbierta != null && carpetaAbierta.esLista ? "< Listas" : "< Carpetas");
+            btnVolver.setText(carpetaAbierta != null && carpetaAbierta.esLista ? "\u2039 Atrás (Listas)" : "\u2039 Atrás (Carpetas)");
             txtCount.setText((carpetaAbierta != null ? carpetaAbierta.name : "") + " · " + cancionesCarpeta.size() + " canciones");
             br.setVisibility(View.VISIBLE); ba.setVisibility(View.VISIBLE);
             tabsRow.setVisibility(View.GONE);
@@ -1597,18 +1597,25 @@ public class MainActivity extends Activity {
     }
 
     // ---------- Explorador de carpetas ----------
-    private void abrirExplorador() {
-        ArrayList<File> base = raicesBase();
-        expActual = base.isEmpty() ? new File("/") : base.get(0);
-        pintarExplorador();
-        mostrarPane(3);
-    }
+
     private void pintarExplorador() {
         expItems.clear(); expDirs.clear();
         TextView ruta = (TextView) findViewById(R.id.txtRutaActual);
+        // PANTALLA DE UNIDADES: al abrir, mostrar todas (USB, interno) para que el usuario elija facil
+        if (expEnRaices || expActual == null) {
+            expEnRaices = true;
+            ruta.setText("Elige una unidad (toca tu USB)");
+            ArrayList<File> uni = unidadesDetectadas();
+            for (File u : uni) { expItems.add(etiquetaUnidad(u)); expDirs.add(u); }
+            if (expItems.isEmpty()) { expItems.add("(No se detectaron unidades)"); expDirs.add(null); }
+            expAdapter.notifyDataSetChanged();
+            listExplorar.setSelection(0);
+            return;
+        }
         ruta.setText(expActual != null ? expActual.getAbsolutePath() : "/");
         File parent = expActual != null ? expActual.getParentFile() : null;
-        if (parent != null) { expItems.add(".. (subir)"); expDirs.add(parent); }
+        // "subir": si ya estamos en una raiz de unidad, subir vuelve a la lista de unidades
+        expItems.add(".. (subir)"); expDirs.add(parent);
         File[] hijos = null;
         try { hijos = expActual.listFiles(); } catch (Exception e) {}
         if (hijos != null) {
@@ -1624,11 +1631,27 @@ public class MainActivity extends Activity {
     }
     private void navegarExplorador(int pos) {
         if (pos < 0 || pos >= expDirs.size()) return;
-        expActual = expDirs.get(pos);
+        File destino = expDirs.get(pos);
+        if (expEnRaices) {
+            // estabamos en la lista de unidades -> entrar a la unidad elegida
+            if (destino == null) return;
+            expEnRaices = false;
+            expActual = destino;
+            pintarExplorador();
+            return;
+        }
+        if (destino == null) {
+            // "subir" desde la raiz de una unidad -> volver a la lista de unidades
+            expEnRaices = true;
+            expActual = null;
+            pintarExplorador();
+            return;
+        }
+        expActual = destino;
         pintarExplorador();
     }
     private void usarCarpeta() {
-        if (expActual == null) return;
+        if (expEnRaices || expActual == null) { Toast.makeText(this, "Entra a la carpeta de tu música primero", Toast.LENGTH_SHORT).show(); return; }
         carpetaVinculada = expActual.getAbsolutePath();
         prefs.edit().putString("carpetaVinc", carpetaVinculada).apply();
         Toast.makeText(this, "Carpeta vinculada", Toast.LENGTH_SHORT).show();
@@ -2204,6 +2227,11 @@ public class MainActivity extends Activity {
                     if (letrasTexto != null) letrasTexto.setText("");
                     letraUltimaIdx = -2;
                     try { actualizarLetraLinea(); } catch (Exception e) {}
+                    // FORZAR refresco en tiempo real: reintentar unas veces por si el momento no coincidio
+                    handler.postDelayed(new Runnable(){ public void run(){ letraUltimaIdx = -2; try { actualizarLetraLinea(); } catch (Exception e) {} }}, 150);
+                    handler.postDelayed(new Runnable(){ public void run(){ letraUltimaIdx = -2; try { actualizarLetraLinea(); } catch (Exception e) {} }}, 500);
+                    handler.postDelayed(new Runnable(){ public void run(){ try { actualizarLetraLinea(); } catch (Exception e) {} }}, 1000);
+                    try { handler.removeCallbacks(actualizador); handler.post(actualizador); } catch (Exception e) {}   // asegurar que el actualizador corra
                 } else {
                     synchronized (letraLock){ letraTiempos.clear(); letraLineas.clear(); letraPlain=null; letraSync=false; }
                     if (letrasTexto != null) letrasTexto.setText("Sin letra sincronizada");

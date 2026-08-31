@@ -272,8 +272,8 @@
             android:gravity="center_vertical"
             android:paddingBottom="8dp">
             <Button android:id="@+id/btnVolver" android:layout_width="wrap_content" android:layout_height="46dp"
-                android:text="&lt; Volver" android:textColor="@color/text" android:textSize="15sp"
-                android:background="@color/surface"/>
+                android:text="&#8249; Men&#250; principal" android:textColor="@color/accent" android:textStyle="bold" android:textSize="14sp"
+                android:background="@drawable/card_boton" android:paddingLeft="16dp" android:paddingRight="16dp"/>
             <TextView android:id="@+id/count" android:layout_width="0dp" android:layout_height="wrap_content"
                 android:layout_weight="1" android:layout_marginLeft="12dp" android:text="Buscando música…"
                 android:textColor="@color/muted" android:textSize="14sp"/>
@@ -339,7 +339,7 @@
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v186" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v187" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
