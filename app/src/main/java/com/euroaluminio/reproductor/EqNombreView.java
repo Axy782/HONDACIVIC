@@ -100,8 +100,8 @@ public class EqNombreView extends View {
             if (magLin[k] > maxM) maxM = magLin[k];
         }
         // REFERENCIA AUTO-CALIBRABLE: se pega al pico real del radio (sube rapido, baja muy lento)
-        if (maxM > refAdapt) refAdapt = refAdapt * 0.7f + maxM * 0.3f;
-        else refAdapt = refAdapt * 0.9995f + maxM * 0.0005f;
+        if (maxM > refAdapt) refAdapt = refAdapt * 0.96f + maxM * 0.04f;   // sube LENTO: referencia estable
+        else refAdapt = refAdapt * 0.9997f + maxM * 0.0003f;
         if (refAdapt < 200f) refAdapt = 200f;
         float ref = refAdapt;
         int usable = (int) Math.floor(nb * 0.9f);
@@ -114,7 +114,7 @@ public class EqNombreView extends View {
                 float dbfs = (float) (20.0 * Math.log10((magLin[b] + 0.001f) / ref));   // <= 0 (0 = tan fuerte como el pico)
                 // TILT de agudos: la musica trae poca energia arriba; se levanta en dB (fisica correcta) para que NO mueran
                 dbfs += ((float) i / N) * 34f;
-                float bv = (dbfs + 40f) / 40f;     // ventana de 40 dB
+                float bv = (dbfs + 30f) / 24f;     // ventana mas alta (barras llenas como PC)
                 if (bv < 0f) bv = 0f;
                 if (bv > 1f) bv = 1f;
                 sum += bv; c++;
@@ -124,6 +124,15 @@ public class EqNombreView extends View {
             if (v > 1f) v = 1f;
             vTmp[i] = v;
         }
+        // SUAVIZADO ESPACIAL: promediar cada barra con sus vecinas -> alfombra pareja como PC (no picudo/nervioso)
+        float[] suav = new float[N];
+        for (int i = 0; i < N; i++) {
+            float s = vTmp[i] * 2f; float w = 2f;
+            if (i > 0)     { s += vTmp[i-1]; w += 1f; }
+            if (i < N-1)   { s += vTmp[i+1]; w += 1f; }
+            suav[i] = s / w;
+        }
+        for (int i = 0; i < N; i++) vTmp[i] = suav[i];
         // ===== DETECTOR DE GOLPE (beat) -> da la sensacion de RITMO como el PC =====
         float bass = 0f;
         for (int b = 1; b < 6 && b < nb; b++) bass += magLin[b];
