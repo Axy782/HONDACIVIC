@@ -366,6 +366,9 @@ public class MainActivity extends Activity {
     private final ArrayList<String> expItems = new ArrayList<String>();
     private final ArrayList<File> expDirs = new ArrayList<File>();
     private File expActual = null;
+    private EditText etBuscarRef = null;
+    private View tecladoPanel = null;
+    private boolean tecladoMayus = false;
     private boolean expEnRaices = false;   // true = mostrando lista de unidades (USB, interno)
     // Listas de reproducción
     private org.json.JSONObject listas = new org.json.JSONObject();  // nombre -> [rutas]
@@ -643,8 +646,16 @@ public class MainActivity extends Activity {
             public void onTextChanged(CharSequence s, int a, int b, int c) { filtrarBusqueda(s.toString()); }
             public void afterTextChanged(android.text.Editable s) {}
         });
+        // ===== TECLADO INTERNO: no usar el del radio =====
+        etBuscarRef = etBuscar;
+        etBuscar.setInputType(android.text.InputType.TYPE_NULL);   // apaga el teclado del sistema
+        try { etBuscar.setTextIsSelectable(true); } catch (Exception e) {}
+        construirTeclado();
+        etBuscar.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarTeclado(true); }});
+        etBuscar.setOnFocusChangeListener(new View.OnFocusChangeListener(){ public void onFocusChange(View v, boolean f){ if (f) mostrarTeclado(true); }});
         findViewById(R.id.btnLimpiarBuscar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             etBuscar.setText("");
+            mostrarTeclado(false);
             try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); imm.hideSoftInputFromWindow(etBuscar.getWindowToken(), 0); } catch (Exception e) {}
         }});
         findViewById(R.id.btnVozBuscar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ buscarPorVoz(); }});
@@ -883,6 +894,68 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // ===== TECLADO INTERNO (no depende del teclado del radio) =====
+    private void construirTeclado() {
+        tecladoPanel = findViewById(R.id.tecladoPanel);
+        if (tecladoPanel == null) return;
+        android.widget.LinearLayout cont = (android.widget.LinearLayout) tecladoPanel;
+        cont.removeAllViews();
+        String[] filas = { "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
+        for (int r = 0; r < filas.length; r++) {
+            android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
+            fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            android.widget.LinearLayout.LayoutParams flp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+            fila.setLayoutParams(flp);
+            String f2 = filas[r];
+            for (int i = 0; i < f2.length(); i++) {
+                final String ch = String.valueOf(f2.charAt(i));
+                fila.addView(crearTecla(ch, 1f, new Runnable(){ public void run(){ escribirTecla(ch); }}));
+            }
+            cont.addView(fila);
+        }
+        // fila inferior: MAYUS, espacio, borrar, cerrar
+        android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
+        fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        fila.addView(crearTecla("⇧", 1.6f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
+        fila.addView(crearTecla("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+        fila.addView(crearTecla("⌫", 1.6f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        fila.addView(crearTecla("Cerrar", 2f, new Runnable(){ public void run(){ mostrarTeclado(false); }}));
+        cont.addView(fila);
+    }
+    private android.widget.Button crearTecla(String texto, float peso, final Runnable accion) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(texto);
+        b.setAllCaps(false);
+        b.setTextColor(0xFFF4F4F8);
+        b.setTextSize(16);
+        b.setBackgroundResource(R.drawable.tecla);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, peso);
+        lp.setMargins(3, 3, 3, 3);
+        b.setLayoutParams(lp);
+        b.setPadding(0, 0, 0, 0);
+        b.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ accion.run(); } });
+        return b;
+    }
+    private void escribirTecla(String ch) {
+        if (etBuscarRef == null) return;
+        String c = tecladoMayus ? ch.toUpperCase(java.util.Locale.US) : ch.toLowerCase(java.util.Locale.US);
+        if (ch.equals(" ")) c = " ";
+        int pos = etBuscarRef.getSelectionStart(); if (pos < 0) pos = etBuscarRef.getText().length();
+        etBuscarRef.getText().insert(pos, c);
+    }
+    private void borrarTecla() {
+        if (etBuscarRef == null) return;
+        int pos = etBuscarRef.getSelectionStart();
+        if (pos > 0) etBuscarRef.getText().delete(pos - 1, pos);
+    }
+    private void mostrarTeclado(boolean ver) {
+        if (tecladoPanel == null) return;
+        // esconder SIEMPRE el teclado del sistema
+        try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); if (etBuscarRef != null) imm.hideSoftInputFromWindow(etBuscarRef.getWindowToken(), 0); } catch (Exception e) {}
+        tecladoPanel.setVisibility(ver ? View.VISIBLE : View.GONE);
+    }
     private void abrirExplorador() {
         expEnRaices = true;
         expActual = null;
@@ -2434,7 +2507,6 @@ public class MainActivity extends Activity {
     private void attachVisualizer() {
         try {
             if (visualizer != null) {
-                try { if (eqNombre != null) eqNombre.setVisualizer(null); } catch (Exception e) {}
                 try { visualizer.setEnabled(false); } catch (Exception e) {}
                 try { visualizer.release(); } catch (Exception e) {}
                 visualizer = null;
@@ -2450,7 +2522,6 @@ public class MainActivity extends Activity {
                 public void onFftDataCapture(Visualizer v, byte[] data, int r) { if (vizBg != null) vizBg.setFft(data); if (particles != null) particles.setFft(data); if (eqNombre != null) eqNombre.setFft(data); }
             }, rate, false, true);
             visualizer.setEnabled(true);
-            try { if (eqNombre != null) eqNombre.setVisualizer(visualizer); } catch (Exception e) {}   // acceso DIRECTO cada cuadro (tecnica del PC)
         } catch (Throwable t) { visualizer = null; }
     }
 
@@ -3862,7 +3933,6 @@ public class MainActivity extends Activity {
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}
         try { if (volObserver != null) getContentResolver().unregisterContentObserver(volObserver); } catch (Exception e) {}
-        try { if (eqNombre != null) eqNombre.setVisualizer(null); } catch (Exception e) {}
         try { if (visualizer != null) { try { visualizer.setEnabled(false); } catch (Exception e) {} visualizer.release(); } } catch (Exception e) {}
         try { if (vizBg != null) vizBg.parar(); } catch (Exception e) {}
         try { if (particles != null) particles.parar(); } catch (Exception e) {}
