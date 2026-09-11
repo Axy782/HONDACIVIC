@@ -291,7 +291,7 @@
                 android:layout_weight="1" android:hint="Buscar cancion..." android:textColorHint="@color/muted"
                 android:textColor="@color/text" android:textSize="16sp" android:singleLine="true"
                 android:background="@color/surface2" android:paddingLeft="14dp" android:paddingRight="14dp"
-                android:inputType="text" android:imeOptions="actionSearch"/>
+                android:inputType="none" android:imeOptions="actionNone" android:focusable="true"/>
             <Button android:id="@+id/btnVozBuscar" android:layout_width="wrap_content" android:layout_height="48dp"
                 android:text="Voz" android:textColor="@color/accent" android:textStyle="bold" android:textSize="14sp" android:background="@color/surface2"
                 android:layout_marginLeft="6dp" android:paddingLeft="14dp" android:paddingRight="14dp"/>
@@ -343,7 +343,7 @@
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v190" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v194" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"

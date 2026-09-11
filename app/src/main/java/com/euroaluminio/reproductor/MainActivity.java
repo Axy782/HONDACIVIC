@@ -367,6 +367,8 @@ public class MainActivity extends Activity {
     private final ArrayList<File> expDirs = new ArrayList<File>();
     private File expActual = null;
     private EditText etBuscarRef = null;
+    private final Runnable busquedaPendiente = new Runnable(){ public void run(){ try { filtrarBusqueda(busquedaTexto); } catch (Exception e) {} } };
+    private String busquedaTexto = "";
     private View tecladoPanel = null;
     private boolean tecladoMayus = false;
     private boolean expEnRaices = false;   // true = mostrando lista de unidades (USB, interno)
@@ -643,7 +645,7 @@ public class MainActivity extends Activity {
         final EditText etBuscar = (EditText) findViewById(R.id.etBuscar);
         etBuscar.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            public void onTextChanged(CharSequence s, int a, int b, int c) { filtrarBusqueda(s.toString()); }
+            public void onTextChanged(CharSequence s, int a, int b, int c) { programarBusqueda(s.toString()); }
             public void afterTextChanged(android.text.Editable s) {}
         });
         // ===== TECLADO INTERNO: no usar el del radio =====
@@ -652,7 +654,17 @@ public class MainActivity extends Activity {
         try { etBuscar.setTextIsSelectable(true); } catch (Exception e) {}
         construirTeclado();
         etBuscar.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarTeclado(true); }});
-        etBuscar.setOnFocusChangeListener(new View.OnFocusChangeListener(){ public void onFocusChange(View v, boolean f){ if (f) mostrarTeclado(true); }});
+        // NO abrir el teclado por foco (hacia que se abriera solo al entrar a canciones). Solo al TOCAR el campo.
+        // Bloquear la accion "Aceptar/Enter" del sistema (era lo que cerraba el radio)
+        etBuscar.setOnEditorActionListener(new android.widget.TextView.OnEditorActionListener(){
+            public boolean onEditorAction(android.widget.TextView v, int actionId, android.view.KeyEvent e){ return true; }
+        });
+        etBuscar.setOnKeyListener(new View.OnKeyListener(){
+            public boolean onKey(View v, int keyCode, android.view.KeyEvent e){
+                if (keyCode == android.view.KeyEvent.KEYCODE_ENTER) return true;   // ignorar Enter
+                return false;
+            }
+        });
         findViewById(R.id.btnLimpiarBuscar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             etBuscar.setText("");
             mostrarTeclado(false);
@@ -810,13 +822,23 @@ public class MainActivity extends Activity {
     // Carpetas donde buscar: SIEMPRE incluye "Descarga"; si hay una vinculada, esa; si no, todo
     private ArrayList<File> raices() {
         ArrayList<File> r = new ArrayList<File>();
-        try { File desc = carpetaDescarga(); if (desc != null && desc.exists() && desc.canRead()) r.add(desc); } catch (Exception e) {}
-        try { File vid = carpetaVideos(); if (vid != null && vid.exists() && vid.canRead()) r.add(vid); } catch (Exception e) {}
+        // 1) Si hay carpeta vinculada: buscar SOLO ahi (rapido y enfocado)
         if (carpetaVinculada != null) {
             File f = new File(carpetaVinculada);
             if (f.exists() && f.canRead()) { r.add(f); return r; }
         }
-        r.addAll(raicesBase());
+        // 2) Si no hay vinculada: SOLO unidades USB (nunca la memoria interna, para que sea rapido)
+        try {
+            for (File u : unidadesDetectadas()) {
+                String p = u.getAbsolutePath().toLowerCase(java.util.Locale.US);
+                if (p.contains("usb") || p.contains("media_rw") || p.contains("sda") || p.contains("udisk")) r.add(u);
+            }
+        } catch (Exception e) {}
+        if (!r.isEmpty()) return r;
+        // 3) Respaldo (si no se detecto USB): carpetas Descarga/Videos
+        try { File desc = carpetaDescarga(); if (desc != null && desc.exists() && desc.canRead()) r.add(desc); } catch (Exception e) {}
+        try { File vid = carpetaVideos(); if (vid != null && vid.exists() && vid.canRead()) r.add(vid); } catch (Exception e) {}
+        if (r.isEmpty()) r.addAll(raicesBase());
         return r;
     }
     // Cuenta rápida de canciones en una carpeta (poca profundidad) para saber si tiene música
@@ -894,6 +916,14 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private final Runnable cierreTecladoPendiente = new Runnable(){ public void run(){ try { mostrarTeclado(false); } catch (Exception e) {} } };
+    private void programarBusqueda(String q) {
+        busquedaTexto = q;
+        try { handler.removeCallbacks(busquedaPendiente); } catch (Exception e) {}
+        try { handler.removeCallbacks(cierreTecladoPendiente); } catch (Exception e) {}
+        handler.postDelayed(busquedaPendiente, 450);        // filtra 0.45s tras la ultima tecla
+        handler.postDelayed(cierreTecladoPendiente, 1400);  // si dejas de escribir ~1.4s, el teclado se cierra solo
+    }
     // ===== TECLADO INTERNO (no depende del teclado del radio) =====
     private void construirTeclado() {
         tecladoPanel = findViewById(R.id.tecladoPanel);
@@ -921,8 +951,27 @@ public class MainActivity extends Activity {
         fila.addView(crearTecla("⇧", 1.6f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
         fila.addView(crearTecla("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
         fila.addView(crearTecla("⌫", 1.6f, new Runnable(){ public void run(){ borrarTecla(); }}));
-        fila.addView(crearTecla("Cerrar", 2f, new Runnable(){ public void run(){ mostrarTeclado(false); }}));
+        fila.addView(crearTeclaBuscar());
         cont.addView(fila);
+    }
+    private android.widget.Button crearTeclaBuscar() {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText("Buscar");
+        b.setAllCaps(false);
+        b.setTextColor(0xFF1A1A1A);
+        b.setTextSize(16);
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+        b.setBackgroundColor(accent);   // resalta (color del tema)
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 3f);
+        lp.setMargins(3, 3, 3, 3);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            // filtrar YA (sin esperar) y esconder el teclado para ver la lista filtrada
+            try { handler.removeCallbacks(busquedaPendiente); } catch (Exception e) {}
+            try { filtrarBusqueda(etBuscarRef != null ? etBuscarRef.getText().toString() : ""); } catch (Exception e) {}
+            mostrarTeclado(false);
+        }});
+        return b;
     }
     private android.widget.Button crearTecla(String texto, float peso, final Runnable accion) {
         android.widget.Button b = new android.widget.Button(this);
@@ -1682,6 +1731,7 @@ public class MainActivity extends Activity {
         paneLista.setVisibility(p == 1 ? View.VISIBLE : View.GONE);
         paneAjustes.setVisibility(p == 2 ? View.VISIBLE : View.GONE);
         paneExplorar.setVisibility(p == 3 ? View.VISIBLE : View.GONE);
+        try { mostrarTeclado(false); if (etBuscarRef != null) etBuscarRef.clearFocus(); } catch (Exception e) {}   // el teclado NO se abre solo al entrar
         if (p == 2) pintarAjustes();
     }
     private void mostrarLista(boolean ver) { mostrarPane(ver ? 1 : 0); }
