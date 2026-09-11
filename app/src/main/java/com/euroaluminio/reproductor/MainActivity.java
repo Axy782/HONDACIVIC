@@ -366,6 +366,7 @@ public class MainActivity extends Activity {
     private final ArrayList<String> expItems = new ArrayList<String>();
     private final ArrayList<File> expDirs = new ArrayList<File>();
     private File expActual = null;
+    private final java.util.HashMap<String,String> idxBusqueda = new java.util.HashMap<String,String>();
     private EditText etBuscarRef = null;
     private final Runnable busquedaPendiente = new Runnable(){ public void run(){ try { filtrarBusqueda(busquedaTexto); } catch (Exception e) {} } };
     private String busquedaTexto = "";
@@ -762,6 +763,7 @@ public class MainActivity extends Activity {
                     }
                     runOnUiThread(new Runnable() {
                         public void run() {
+                            idxBusqueda.clear();
                             agruparEnCarpetas(found);
                             modo = 0; carpetaAbierta = null;
                             adapter.notifyDataSetChanged();
@@ -930,6 +932,7 @@ public class MainActivity extends Activity {
         if (tecladoPanel == null) return;
         android.widget.LinearLayout cont = (android.widget.LinearLayout) tecladoPanel;
         cont.removeAllViews();
+        try { cont.setMinimumHeight((int)(getResources().getDisplayMetrics().heightPixels * 0.52f)); } catch (Exception e) {}
         String[] filas = { "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
         for (int r = 0; r < filas.length; r++) {
             android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
@@ -948,9 +951,9 @@ public class MainActivity extends Activity {
         android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
         fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        fila.addView(crearTecla("⇧", 1.6f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
-        fila.addView(crearTecla("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
-        fila.addView(crearTecla("⌫", 1.6f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        fila.addView(crearTeclaEsp("⇧ Mayús", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
+        fila.addView(crearTecla("espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+        fila.addView(crearTeclaEsp("⌫", 1.8f, new Runnable(){ public void run(){ borrarTecla(); }}));
         fila.addView(crearTeclaBuscar());
         cont.addView(fila);
     }
@@ -974,14 +977,21 @@ public class MainActivity extends Activity {
         return b;
     }
     private android.widget.Button crearTecla(String texto, float peso, final Runnable accion) {
+        return armarTecla(texto, peso, accion, R.drawable.tecla, 0xFFF4F4F8, 18);
+    }
+    private android.widget.Button crearTeclaEsp(String texto, float peso, final Runnable accion) {
+        return armarTecla(texto, peso, accion, R.drawable.tecla_especial, 0xFFFFB020, 15);
+    }
+    private android.widget.Button armarTecla(String texto, float peso, final Runnable accion, int fondo, int col, int tam) {
         android.widget.Button b = new android.widget.Button(this);
         b.setText(texto);
         b.setAllCaps(false);
-        b.setTextColor(0xFFF4F4F8);
-        b.setTextSize(16);
-        b.setBackgroundResource(R.drawable.tecla);
+        b.setTextColor(col);
+        b.setTextSize(tam);
+        b.setTypeface(null, android.graphics.Typeface.BOLD);
+        b.setBackgroundResource(fondo);
         android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, peso);
-        lp.setMargins(3, 3, 3, 3);
+        lp.setMargins(4, 4, 4, 4);
         b.setLayoutParams(lp);
         b.setPadding(0, 0, 0, 0);
         b.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ accion.run(); } });
@@ -2954,12 +2964,17 @@ public class MainActivity extends Activity {
         String qJunto = q.replace(" ", "");
         ArrayList<Song> res = new ArrayList<Song>();
         for (Carpeta c : carpetas) {
+            if (c.esLista || c.songs == null) continue;
             for (Song s : c.songs) {
-                String texto = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+                // INDICE cacheado: se normaliza UNA sola vez por cancion (rapido en cada tecla)
+                String texto = idxBusqueda.get(s.path);
+                if (texto == null) {
+                    texto = norm((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+                    idxBusqueda.put(s.path, texto);
+                }
                 boolean todas = true;
                 for (int k = 0; k < palabras.length; k++) { if (palabras[k].length() > 0 && texto.indexOf(palabras[k]) < 0) { todas = false; break; } }
-                // También aceptar si el nombre pegado (sin espacios) contiene la búsqueda pegada
-                if (!todas && qJunto.length() >= 3 && texto.replace(" ", "").indexOf(qJunto) >= 0) todas = true;
+                if (!todas && qJunto.length() >= 3 && texto.replace(" ", "").indexOf(qJunto) >= 0) todas = true;   // nombre pegado
                 if (todas) res.add(s);
             }
         }
