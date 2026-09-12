@@ -73,6 +73,8 @@ public class MainActivity extends Activity {
         long id, albumId, fecha;
         String title, artist, album, path;
         int dur;
+        String buscable;      // texto ya normalizado (sin tildes) para buscar RAPIDO
+        String buscableJunto; // igual pero sin espacios
     }
 
     static class Carpeta {
@@ -366,8 +368,9 @@ public class MainActivity extends Activity {
     private final ArrayList<String> expItems = new ArrayList<String>();
     private final ArrayList<File> expDirs = new ArrayList<File>();
     private File expActual = null;
-    private final java.util.HashMap<String,String> idxBusqueda = new java.util.HashMap<String,String>();
     private EditText etBuscarRef = null;
+    private EditText tecladoActivo = null;              // campo donde escribe el teclado (busqueda o dialogos)
+    private android.widget.PopupWindow tecladoPop = null;
     private final Runnable busquedaPendiente = new Runnable(){ public void run(){ try { filtrarBusqueda(busquedaTexto); } catch (Exception e) {} } };
     private String busquedaTexto = "";
     private View tecladoPanel = null;
@@ -488,7 +491,7 @@ public class MainActivity extends Activity {
         aplicarTema();
 
         findViewById(R.id.btnAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
-        findViewById(R.id.btnCerrarAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(0); }});
+
         final CheckBox chkAuto = (CheckBox) findViewById(R.id.chkAuto);
         final CheckBox chkEmbed = (CheckBox) findViewById(R.id.chkEmbed);
         chkAuto.setChecked(optAuto); chkEmbed.setChecked(optEmbed);
@@ -501,7 +504,6 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnDesvincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ carpetaVinculada=null; prefs.edit().remove("carpetaVinc").apply(); pintarAjustes(); escanearMusica(); }});
         findViewById(R.id.btnDescargarArt).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ descargarFaltantes(); }});
         findViewById(R.id.btnWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ alternarServidorWifi(); }});
-        findViewById(R.id.btnYouTube).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirYouTube(); }});
         findViewById(R.id.btnCancelarExplorar).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarPane(2); }});
         findViewById(R.id.btnUsarCarpeta).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ usarCarpeta(); }});
 
@@ -654,7 +656,7 @@ public class MainActivity extends Activity {
         etBuscar.setInputType(android.text.InputType.TYPE_NULL);   // apaga el teclado del sistema
         try { etBuscar.setTextIsSelectable(true); } catch (Exception e) {}
         construirTeclado();
-        etBuscar.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarTeclado(true); }});
+        etBuscar.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ tecladoActivo = etBuscarRef; mostrarTeclado(true); }});
         // NO abrir el teclado por foco (hacia que se abriera solo al entrar a canciones). Solo al TOCAR el campo.
         // Bloquear la accion "Aceptar/Enter" del sistema (era lo que cerraba el radio)
         etBuscar.setOnEditorActionListener(new android.widget.TextView.OnEditorActionListener(){
@@ -681,6 +683,7 @@ public class MainActivity extends Activity {
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             public void onItemClick(AdapterView<?> p, View v, int position, long idd) {
                 if (modo == 0) { if (tab == 0) abrirCarpeta(position); else if (tab == 1) abrirLista(position); else abrirVideo(position); }
+                else if (enBusqueda && carpetaAbierta == carpetaBusqueda) { menuReproBusqueda(position); }
                 else { reproducirDeCarpeta(position); }
             }
         });
@@ -763,7 +766,6 @@ public class MainActivity extends Activity {
                     }
                     runOnUiThread(new Runnable() {
                         public void run() {
-                            idxBusqueda.clear();
                             agruparEnCarpetas(found);
                             modo = 0; carpetaAbierta = null;
                             adapter.notifyDataSetChanged();
@@ -923,23 +925,22 @@ public class MainActivity extends Activity {
         busquedaTexto = q;
         try { handler.removeCallbacks(busquedaPendiente); } catch (Exception e) {}
         try { handler.removeCallbacks(cierreTecladoPendiente); } catch (Exception e) {}
-        handler.postDelayed(busquedaPendiente, 450);        // filtra 0.45s tras la ultima tecla
-        handler.postDelayed(cierreTecladoPendiente, 1400);  // si dejas de escribir ~1.4s, el teclado se cierra solo
+        handler.postDelayed(busquedaPendiente, 450);        // filtra 0.45s tras la ultima tecla (el teclado NO se cierra solo: molestaba al escribir)
     }
     // ===== TECLADO INTERNO (no depende del teclado del radio) =====
     private void construirTeclado() {
         tecladoPanel = findViewById(R.id.tecladoPanel);
         if (tecladoPanel == null) return;
-        android.widget.LinearLayout cont = (android.widget.LinearLayout) tecladoPanel;
+        armarTeclasEn((android.widget.LinearLayout) tecladoPanel, false);
+    }
+    // Arma las teclas dentro de un contenedor. esPopup=true -> boton "Listo" (cierra flotante); false -> "Buscar" (filtra+cierra panel)
+    private void armarTeclasEn(android.widget.LinearLayout cont, final boolean esPopup) {
         cont.removeAllViews();
-        try { cont.setMinimumHeight((int)(getResources().getDisplayMetrics().heightPixels * 0.52f)); } catch (Exception e) {}
         String[] filas = { "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
         for (int r = 0; r < filas.length; r++) {
             android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
             fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-            android.widget.LinearLayout.LayoutParams flp = new android.widget.LinearLayout.LayoutParams(
-                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-            fila.setLayoutParams(flp);
+            fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
             String f2 = filas[r];
             for (int i = 0; i < f2.length(); i++) {
                 final String ch = String.valueOf(f2.charAt(i));
@@ -947,14 +948,22 @@ public class MainActivity extends Activity {
             }
             cont.addView(fila);
         }
-        // fila inferior: MAYUS, espacio, borrar, cerrar
         android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
         fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        fila.addView(crearTeclaEsp("⇧ Mayús", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
-        fila.addView(crearTecla("espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
-        fila.addView(crearTeclaEsp("⌫", 1.8f, new Runnable(){ public void run(){ borrarTecla(); }}));
-        fila.addView(crearTeclaBuscar());
+        fila.addView(crearTeclaAccion("⇧ May", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
+        fila.addView(crearTeclaAccion("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+        fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        if (esPopup) {
+            android.widget.Button b = crearTeclaAccion("✓ Listo", 2.4f, new Runnable(){ public void run(){ cerrarTecladoPopup(); }});
+            b.setTextColor(0xFF1A1A1A);
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setColor(accent); gd.setCornerRadius(9 * getResources().getDisplayMetrics().density);
+            b.setBackgroundDrawable(gd);
+            fila.addView(b);
+        } else {
+            fila.addView(crearTeclaBuscar());
+        }
         cont.addView(fila);
     }
     private android.widget.Button crearTeclaBuscar() {
@@ -964,9 +973,12 @@ public class MainActivity extends Activity {
         b.setTextColor(0xFF1A1A1A);
         b.setTextSize(16);
         b.setTypeface(null, android.graphics.Typeface.BOLD);
-        b.setBackgroundColor(accent);   // resalta (color del tema)
+        b.setTextSize(16);
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setColor(accent); gd.setCornerRadius(9 * getResources().getDisplayMetrics().density);
+        b.setBackgroundDrawable(gd);
         android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 3f);
-        lp.setMargins(3, 3, 3, 3);
+        lp.setMargins(4, 4, 4, 4);
         b.setLayoutParams(lp);
         b.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             // filtrar YA (sin esperar) y esconder el teclado para ver la lista filtrada
@@ -977,19 +989,27 @@ public class MainActivity extends Activity {
         return b;
     }
     private android.widget.Button crearTecla(String texto, float peso, final Runnable accion) {
-        return armarTecla(texto, peso, accion, R.drawable.tecla, 0xFFF4F4F8, 18);
-    }
-    private android.widget.Button crearTeclaEsp(String texto, float peso, final Runnable accion) {
-        return armarTecla(texto, peso, accion, R.drawable.tecla_especial, 0xFFFFB020, 15);
-    }
-    private android.widget.Button armarTecla(String texto, float peso, final Runnable accion, int fondo, int col, int tam) {
         android.widget.Button b = new android.widget.Button(this);
         b.setText(texto);
         b.setAllCaps(false);
-        b.setTextColor(col);
-        b.setTextSize(tam);
-        b.setTypeface(null, android.graphics.Typeface.BOLD);
-        b.setBackgroundResource(fondo);
+        b.setTextColor(0xFFF4F4F8);
+        b.setTextSize(16);
+        b.setBackgroundResource(R.drawable.tecla);
+        b.setTextSize(18);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, peso);
+        lp.setMargins(4, 4, 4, 4);
+        b.setLayoutParams(lp);
+        b.setPadding(0, 0, 0, 0);
+        b.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ accion.run(); } });
+        return b;
+    }
+    private android.widget.Button crearTeclaAccion(String texto, float peso, final Runnable accion) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(texto);
+        b.setAllCaps(false);
+        b.setTextColor(0xFFCFCFDA);
+        b.setTextSize(15);
+        b.setBackgroundResource(R.drawable.tecla_accion);
         android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, peso);
         lp.setMargins(4, 4, 4, 4);
         b.setLayoutParams(lp);
@@ -998,16 +1018,45 @@ public class MainActivity extends Activity {
         return b;
     }
     private void escribirTecla(String ch) {
-        if (etBuscarRef == null) return;
+        EditText et = (tecladoActivo != null) ? tecladoActivo : etBuscarRef;
+        if (et == null) return;
         String c = tecladoMayus ? ch.toUpperCase(java.util.Locale.US) : ch.toLowerCase(java.util.Locale.US);
         if (ch.equals(" ")) c = " ";
-        int pos = etBuscarRef.getSelectionStart(); if (pos < 0) pos = etBuscarRef.getText().length();
-        etBuscarRef.getText().insert(pos, c);
+        int pos = et.getSelectionStart(); if (pos < 0) pos = et.getText().length();
+        try { et.getText().insert(pos, c); } catch (Exception e) { et.append(c); }
     }
     private void borrarTecla() {
-        if (etBuscarRef == null) return;
-        int pos = etBuscarRef.getSelectionStart();
-        if (pos > 0) etBuscarRef.getText().delete(pos - 1, pos);
+        EditText et = (tecladoActivo != null) ? tecladoActivo : etBuscarRef;
+        if (et == null) return;
+        int pos = et.getSelectionStart();
+        if (pos > 0) { try { et.getText().delete(pos - 1, pos); } catch (Exception e) {} }
+        else { int L = et.getText().length(); if (L>0) et.getText().delete(L-1, L); }
+    }
+    // Teclado FLOTANTE para cualquier campo (dialogos: buscar caratula, renombrar, etc.)
+    private void tecladoEnCampo(final EditText et) {
+        if (et == null) return;
+        et.setInputType(android.text.InputType.TYPE_NULL);
+        try { et.setTextIsSelectable(true); } catch (Exception e) {}
+        et.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirTecladoPopup(et); }});
+        et.setOnFocusChangeListener(new View.OnFocusChangeListener(){ public void onFocusChange(View v, boolean f){ if (f) abrirTecladoPopup(et); }});
+    }
+    private void abrirTecladoPopup(final EditText et) {
+        tecladoActivo = et;
+        try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); imm.hideSoftInputFromWindow(et.getWindowToken(), 0); } catch (Exception e) {}
+        android.widget.LinearLayout cont = new android.widget.LinearLayout(this);
+        cont.setOrientation(android.widget.LinearLayout.VERTICAL);
+        cont.setBackgroundColor(0xF2101018);
+        int pad = (int)(8 * getResources().getDisplayMetrics().density);
+        cont.setPadding(pad, pad, pad, pad);
+        armarTeclasEn(cont, true);
+        int alto = (int)(230 * getResources().getDisplayMetrics().density);
+        tecladoPop = new android.widget.PopupWindow(cont, android.view.ViewGroup.LayoutParams.MATCH_PARENT, alto);
+        tecladoPop.setFocusable(false);          // NO robar el foco al dialogo (el cursor sigue en el campo)
+        tecladoPop.setOutsideTouchable(false);
+        try { tecladoPop.showAtLocation(et.getRootView(), android.view.Gravity.BOTTOM, 0, 0); } catch (Exception e) {}
+    }
+    private void cerrarTecladoPopup() {
+        try { if (tecladoPop != null) { tecladoPop.dismiss(); tecladoPop = null; } } catch (Exception e) {}
     }
     private void mostrarTeclado(boolean ver) {
         if (tecladoPanel == null) return;
@@ -1393,7 +1442,7 @@ public class MainActivity extends Activity {
         b.show();
     }
     private void crearListaDialog(final Song s) {
-        final EditText et = new EditText(this); et.setHint("Nombre de la lista");
+        final EditText et = new EditText(this); et.setHint("Nombre de la lista"); tecladoEnCampo(et);
         AlertDialog.Builder b = new AlertDialog.Builder(this); b.setTitle("Nueva lista"); b.setView(et);
         b.setPositiveButton("Crear", new android.content.DialogInterface.OnClickListener() {
             public void onClick(android.content.DialogInterface d, int w) { String n = et.getText().toString().trim(); if (n.length() > 0) agregarALista(n, s); }
@@ -1470,6 +1519,80 @@ public class MainActivity extends Activity {
     }
 
     // Reproduce una canción tocada dentro de la carpeta abierta
+    private Carpeta carpetaRealDe(Song s) {
+        for (Carpeta c : carpetas) {
+            if (c.esLista || c == carpetaBusqueda) continue;
+            if (c.songs != null && c.songs.contains(s)) return c;
+        }
+        return null;
+    }
+    private void reproducirLista(ArrayList<Song> lista, Song sel) {
+        if (lista == null || lista.isEmpty()) return;
+        int i = lista.indexOf(sel); if (i < 0) i = 0;
+        songs.clear(); songs.addAll(lista);
+        construirOrden();
+        reproducirCancion(i);
+        mostrarLista(false);
+    }
+    // Menu al tocar una cancion desde la BUSQUEDA: 2 opciones (esta carpeta / todo el artista)
+    private void menuReproBusqueda(int idx) {
+        if (idx < 0 || idx >= cancionesCarpeta.size()) return;
+        final Song sel = cancionesCarpeta.get(idx);
+        final float d = getResources().getDisplayMetrics().density;
+        final String art = (sel.artist != null) ? sel.artist.trim() : "";
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = (int)(18*d); box.setPadding(pad, pad, pad, pad);
+        box.setBackgroundColor(0xFF1C1C26);
+        TextView t1 = new TextView(this);
+        t1.setText(sel.title != null && sel.title.length()>0 ? sel.title : nombreDe(sel));
+        t1.setTextColor(0xFFFFFFFF); t1.setTextSize(20); t1.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(t1);
+        if (art.length() > 0) {
+            TextView t2 = new TextView(this); t2.setText(art);
+            t2.setTextColor(0xFF9A9AA8); t2.setTextSize(14);
+            box.addView(t2);
+        }
+        TextView t3 = new TextView(this); t3.setText("¿Qué quieres reproducir?");
+        t3.setTextColor(accent); t3.setTextSize(15); t3.setPadding(0,(int)(14*d),0,(int)(10*d));
+        box.addView(t3);
+        final android.app.AlertDialog dlg = new AlertDialog.Builder(this).setView(box).create();
+        // Opcion 1: Esta carpeta
+        android.widget.Button b1 = new android.widget.Button(this);
+        b1.setText("▶  Esta carpeta");
+        b1.setAllCaps(false); b1.setTextColor(0xFF1A1A1A); b1.setTextSize(17); b1.setTypeface(null, android.graphics.Typeface.BOLD);
+        android.graphics.drawable.GradientDrawable g1 = new android.graphics.drawable.GradientDrawable();
+        g1.setColor(accent); g1.setCornerRadius(12*d); b1.setBackgroundDrawable(g1);
+        android.widget.LinearLayout.LayoutParams lp1 = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, (int)(56*d));
+        lp1.setMargins(0,(int)(4*d),0,(int)(8*d)); b1.setLayoutParams(lp1);
+        b1.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            Carpeta c = carpetaRealDe(sel);
+            if (c != null) reproducirLista(c.songs, sel); else reproducirLista(cancionesCarpeta, sel);
+            dlg.dismiss();
+        }});
+        box.addView(b1);
+        // Opcion 2: Todo el artista
+        android.widget.Button b2 = new android.widget.Button(this);
+        b2.setText("♫  Todo el artista");
+        b2.setAllCaps(false); b2.setTextColor(0xFFF4F4F8); b2.setTextSize(17); b2.setTypeface(null, android.graphics.Typeface.BOLD);
+        android.graphics.drawable.GradientDrawable g2 = new android.graphics.drawable.GradientDrawable();
+        g2.setColor(0xFF33333F); g2.setCornerRadius(12*d); b2.setBackgroundDrawable(g2);
+        android.widget.LinearLayout.LayoutParams lp2 = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, (int)(56*d));
+        b2.setLayoutParams(lp2);
+        b2.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            ArrayList<Song> delArtista = new ArrayList<Song>();
+            String an = norm(art);
+            for (Carpeta c : carpetas) {
+                if (c.esLista || c == carpetaBusqueda) continue;
+                for (Song s : c.songs) { if (s.artist != null && norm(s.artist).equals(an)) delArtista.add(s); }
+            }
+            if (delArtista.isEmpty()) delArtista.add(sel);
+            reproducirLista(delArtista, sel);
+            dlg.dismiss();
+        }});
+        box.addView(b2);
+        dlg.show();
+    }
     private void reproducirDeCarpeta(int idx) {
         if (idx < 0 || idx >= cancionesCarpeta.size()) return;
         songs.clear();
@@ -1742,7 +1865,7 @@ public class MainActivity extends Activity {
         paneAjustes.setVisibility(p == 2 ? View.VISIBLE : View.GONE);
         paneExplorar.setVisibility(p == 3 ? View.VISIBLE : View.GONE);
         try { mostrarTeclado(false); if (etBuscarRef != null) etBuscarRef.clearFocus(); } catch (Exception e) {}   // el teclado NO se abre solo al entrar
-        if (p == 2) pintarAjustes();
+
     }
     private void mostrarLista(boolean ver) { mostrarPane(ver ? 1 : 0); }
 
@@ -1750,6 +1873,7 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         View pv = findViewById(R.id.paneVideo);
         if (pv != null && pv.getVisibility() == View.VISIBLE) { cerrarVideo(); return; }
+        if (paneAjustes != null && paneAjustes.getVisibility() == View.VISIBLE && enSeccionAjustes) { mostrarMenuAjustes(); return; }
         if (paneExplorar != null && paneExplorar.getVisibility() == View.VISIBLE) { mostrarPane(2); return; }
         if (paneAjustes != null && paneAjustes.getVisibility() == View.VISIBLE) { mostrarPane(0); return; }
         if (paneLista != null && paneLista.getVisibility() == View.VISIBLE) { atrasEnLista(); return; }
@@ -1763,6 +1887,23 @@ public class MainActivity extends Activity {
             android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
             return ni != null && ni.isConnected();
         } catch (Exception e) { return true; }
+    }
+    private boolean enSeccionAjustes = false;
+    private void mostrarMenuAjustes() {
+        enSeccionAjustes = false;
+        try { findViewById(R.id.menuAjustes).setVisibility(View.VISIBLE); } catch (Exception e) {}
+        int[] secs = { R.id.secMusica, R.id.secCaratulas, R.id.secApariencia, R.id.secReproduccion, R.id.secWifi };
+        for (int id : secs) { try { findViewById(id).setVisibility(View.GONE); } catch (Exception e) {} }
+        try { ((TextView) findViewById(R.id.tituloAjustes)).setText("Configuración"); } catch (Exception e) {}
+        try { ((Button) findViewById(R.id.btnCerrarAjustes)).setText("‹ Reproduciendo"); } catch (Exception e) {}
+    }
+    private void abrirSeccionAjustes(int secId, String titulo) {
+        enSeccionAjustes = true;
+        try { findViewById(R.id.menuAjustes).setVisibility(View.GONE); } catch (Exception e) {}
+        int[] secs = { R.id.secMusica, R.id.secCaratulas, R.id.secApariencia, R.id.secReproduccion, R.id.secWifi };
+        for (int id : secs) { try { findViewById(id).setVisibility(id == secId ? View.VISIBLE : View.GONE); } catch (Exception e) {} }
+        try { ((TextView) findViewById(R.id.tituloAjustes)).setText(titulo); } catch (Exception e) {}
+        try { ((Button) findViewById(R.id.btnCerrarAjustes)).setText("‹ Menú"); } catch (Exception e) {}
     }
     private void pintarAjustes() {
         TextView tv = (TextView) findViewById(R.id.txtCarpetaVinc);
@@ -2964,17 +3105,16 @@ public class MainActivity extends Activity {
         String qJunto = q.replace(" ", "");
         ArrayList<Song> res = new ArrayList<Song>();
         for (Carpeta c : carpetas) {
-            if (c.esLista || c.songs == null) continue;
+            if (c.esLista) continue;
             for (Song s : c.songs) {
-                // INDICE cacheado: se normaliza UNA sola vez por cancion (rapido en cada tecla)
-                String texto = idxBusqueda.get(s.path);
-                if (texto == null) {
-                    texto = norm((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
-                    idxBusqueda.put(s.path, texto);
+                if (s.buscable == null) {   // precalcular una sola vez (RAPIDO en las siguientes teclas)
+                    s.buscable = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+                    s.buscableJunto = s.buscable.replace(" ", "");
                 }
+                String texto = s.buscable;
                 boolean todas = true;
                 for (int k = 0; k < palabras.length; k++) { if (palabras[k].length() > 0 && texto.indexOf(palabras[k]) < 0) { todas = false; break; } }
-                if (!todas && qJunto.length() >= 3 && texto.replace(" ", "").indexOf(qJunto) >= 0) todas = true;   // nombre pegado
+                if (!todas && qJunto.length() >= 2 && s.buscableJunto.indexOf(qJunto) >= 0) todas = true;   // busqueda "pegada" desde 2 letras
                 if (todas) res.add(s);
             }
         }
@@ -3091,6 +3231,7 @@ public class MainActivity extends Activity {
         etTit.setHint("Nombre de la canción");
         etTit.setText(s.title != null ? s.title : "");
         final EditText etArt = new EditText(this);
+        tecladoEnCampo(etTit); tecladoEnCampo(etArt);
         etArt.setHint("Artista");
         etArt.setText(s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
         box.addView(etTit);
@@ -3427,14 +3568,18 @@ public class MainActivity extends Activity {
         etA.setHint("Artista"); etA.setText(artistaIni != null ? artistaIni : ""); etA.setSingleLine(true);
         final android.widget.EditText etC = new android.widget.EditText(this);
         etC.setHint("Canción"); etC.setText(cancionIni != null ? cancionIni : ""); etC.setSingleLine(true);
+        tecladoEnCampo(etA); tecladoEnCampo(etC);   // usar NUESTRO teclado (con Borrar), no el del radio
         box.addView(msg); box.addView(etA); box.addView(etC);
         new AlertDialog.Builder(this).setTitle("Buscar nombre correcto").setView(box)
             .setPositiveButton("Buscar", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface dg, int w) {
+                    cerrarTecladoPopup();
                     buscarSugerenciasCon(s, etA.getText().toString().trim(), etC.getText().toString().trim());
                 }
             })
-            .setNegativeButton("Cancelar", null).show();
+            .setNegativeButton("Cancelar", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface dg, int w) { cerrarTecladoPopup(); }
+            }).show();
     }
     private void mostrarSugerencias(final Song s, final java.util.ArrayList<String[]> items, final java.util.ArrayList<android.graphics.Bitmap> thumbs) {
         final float d = getResources().getDisplayMetrics().density;
@@ -3756,7 +3901,7 @@ public class MainActivity extends Activity {
             }).setNegativeButton("Cancelar", null).show();
     }
     private void renombrarLista(final String n) {
-        final EditText et = new EditText(this); et.setText(n);
+        final EditText et = new EditText(this); et.setText(n); tecladoEnCampo(et);
         new AlertDialog.Builder(this).setTitle("Nuevo nombre").setView(et).setPositiveButton("Guardar", new android.content.DialogInterface.OnClickListener() {
             public void onClick(android.content.DialogInterface d, int w) {
                 String nn = et.getText().toString().trim();

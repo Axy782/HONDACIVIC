@@ -321,7 +321,7 @@
 
         <!-- TECLADO INTERNO (se arma por codigo, aparece al tocar buscar) -->
         <LinearLayout android:id="@+id/tecladoPanel" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:background="#0A0A12" android:padding="6dp" android:visibility="gone"/>
+            android:orientation="vertical" android:background="#101018" android:padding="8dp" android:minHeight="230dp" android:visibility="gone"/>
     </LinearLayout>
 
     <!-- ============ PANTALLA: AJUSTES ============ -->
@@ -340,17 +340,75 @@
             <Button android:id="@+id/btnCerrarAjustes" android:layout_width="wrap_content" android:layout_height="44dp"
                 android:text="&#8592; Reproduciendo" android:textColor="@color/text" android:textSize="14sp"
                 android:background="@drawable/card_boton" android:paddingLeft="16dp" android:paddingRight="16dp"/>
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            <TextView android:id="@+id/tituloAjustes" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v195" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v199" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
             android:padding="14dp" android:clipToPadding="false">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/menuAjustes" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/filaMusica" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#9834;" android:gravity="center"
+                        android:textColor="@color/accent" android:textSize="24sp" android:background="@drawable/card_boton_accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="M&#250;sica" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Carpeta, USB, orden" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/filaCaratulas" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#9635;" android:gravity="center"
+                        android:textColor="@color/accent" android:textSize="24sp" android:background="@drawable/card_boton_accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Car&#225;tulas" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Descargar, grabar, calidad" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/filaApariencia" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#9680;" android:gravity="center"
+                        android:textColor="@color/accent" android:textSize="24sp" android:background="@drawable/card_boton_accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Apariencia" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tema de color" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/filaReproduccion" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#9654;" android:gravity="center"
+                        android:textColor="@color/accent" android:textSize="24sp" android:background="@drawable/card_boton_accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reproducci&#243;n" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Reanudar, auto-play, USB" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/filaWifi" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#8645;" android:gravity="center"
+                        android:textColor="@color/accent" android:textSize="24sp" android:background="@drawable/card_boton_accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Recibir por WiFi" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="M&#250;sica, videos, APK" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                </LinearLayout>
 
-                <!-- ===== TARJETA: MUSICA ===== -->
+                <LinearLayout android:id="@+id/secMusica" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+<!-- ===== TARJETA: MUSICA ===== -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="M&#218;SICA" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold"
                     android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingBottom="8dp"/>
@@ -379,11 +437,13 @@
                         <Button android:id="@+id/ordFecha" android:layout_width="wrap_content" android:layout_height="44dp" android:text="Fecha" android:textSize="13sp" android:textColor="@color/text" android:background="@drawable/card_boton" android:paddingLeft="16dp" android:paddingRight="16dp" android:layout_marginLeft="8dp"/>
                     </LinearLayout>
                 </LinearLayout>
+                </LinearLayout>
 
-                <!-- ===== TARJETA: CARATULAS ===== -->
+                <LinearLayout android:id="@+id/secCaratulas" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+<!-- ===== TARJETA: CARATULAS ===== -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="CAR&#193;TULAS" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold"
-                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="18dp" android:paddingBottom="8dp"/>
+                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="22dp" android:paddingBottom="10dp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:background="@drawable/card_ajuste" android:padding="16dp">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
@@ -416,11 +476,13 @@
                     <TextView android:id="@+id/txtNet" android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:text="" android:textColor="@color/muted" android:textSize="12sp" android:gravity="center" android:paddingTop="4dp"/>
                 </LinearLayout>
+                </LinearLayout>
 
-                <!-- ===== TARJETA: APARIENCIA ===== -->
+                <LinearLayout android:id="@+id/secApariencia" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+<!-- ===== TARJETA: APARIENCIA ===== -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="APARIENCIA" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold"
-                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="18dp" android:paddingBottom="8dp"/>
+                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="22dp" android:paddingBottom="10dp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:background="@drawable/card_ajuste" android:padding="16dp">
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tema de color" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
@@ -431,11 +493,13 @@
                         <Button android:id="@+id/temaVerde" android:layout_width="48dp" android:layout_height="48dp" android:text=" " android:background="#22C55E" android:layout_marginLeft="10dp"/>
                     </LinearLayout>
                 </LinearLayout>
+                </LinearLayout>
 
-                <!-- ===== TARJETA: REPRODUCCION ===== -->
+                <LinearLayout android:id="@+id/secReproduccion" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+<!-- ===== TARJETA: REPRODUCCION ===== -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="REPRODUCCI&#211;N" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold"
-                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="18dp" android:paddingBottom="8dp"/>
+                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="22dp" android:paddingBottom="10dp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:background="@drawable/card_ajuste" android:padding="16dp">
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
@@ -468,21 +532,20 @@
                         <CheckBox android:id="@+id/chkVolArranque" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     </LinearLayout>
                 </LinearLayout>
+                </LinearLayout>
 
-                <!-- ===== TARJETA: EXTRAS ===== -->
+                <LinearLayout android:id="@+id/secWifi" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+<!-- ===== TARJETA: EXTRAS ===== -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:text="EXTRAS" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold"
-                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="18dp" android:paddingBottom="8dp"/>
+                    android:letterSpacing="0.1" android:paddingLeft="4dp" android:paddingTop="22dp" android:paddingBottom="10dp"/>
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:background="@drawable/card_ajuste" android:padding="16dp">
                     <Button android:id="@+id/btnWifi" android:layout_width="match_parent" android:layout_height="52dp"
                         android:text="Recibir archivos por WiFi" android:textColor="@color/accent" android:textStyle="bold" android:background="@drawable/card_boton_accent"/>
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:text="Abre una p&#225;gina para enviar m&#250;sica, videos o APK desde el celular al USB." android:textColor="@color/muted" android:textSize="12sp" android:paddingTop="6dp" android:paddingBottom="14dp"/>
-                    <Button android:id="@+id/btnYouTube" android:layout_width="match_parent" android:layout_height="52dp"
-                        android:text="Abrir YouTube" android:textColor="#FFFFFF" android:textStyle="bold" android:background="@drawable/card_boton_yt"/>
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                        android:text="Abre m.youtube.com en el navegador del radio." android:textColor="@color/muted" android:textSize="12sp" android:paddingTop="6dp"/>
+                        android:text="Abre una p&#225;gina para enviar m&#250;sica, videos o APK desde el celular al USB." android:textColor="@color/muted" android:textSize="12sp" android:paddingTop="6dp"/>
+                </LinearLayout>
                 </LinearLayout>
 
                 <View android:layout_width="match_parent" android:layout_height="20dp"/>
