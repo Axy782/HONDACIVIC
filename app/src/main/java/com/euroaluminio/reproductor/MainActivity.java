@@ -498,6 +498,15 @@ public class MainActivity extends Activity {
         chkAuto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optAuto=c; prefs.edit().putBoolean("optAuto",c).apply(); }});
         chkEmbed.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){ optEmbed=c; prefs.edit().putBoolean("optEmbed",c).apply(); }});
         findViewById(R.id.btnVincular).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirExplorador(); }});
+        // MENU DE AJUSTES (Forma 2): boton atras + filas de categorias
+        findViewById(R.id.btnCerrarAjustes).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
+            if (enSeccionAjustes) mostrarMenuAjustes(); else mostrarPane(0);
+        }});
+        findViewById(R.id.filaMusica).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secMusica, "Música"); }});
+        findViewById(R.id.filaCaratulas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secCaratulas, "Carátulas"); }});
+        findViewById(R.id.filaApariencia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secApariencia, "Apariencia"); }});
+        findViewById(R.id.filaReproduccion).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secReproduccion, "Reproducción"); }});
+        findViewById(R.id.filaWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secWifi, "Recibir por WiFi"); }});
         findViewById(R.id.btnDetectarUsb).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             detectarYEnfocarUsb();
         }});
