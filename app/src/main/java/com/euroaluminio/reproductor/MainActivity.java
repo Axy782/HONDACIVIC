@@ -371,6 +371,7 @@ public class MainActivity extends Activity {
     private EditText etBuscarRef = null;
     private EditText tecladoActivo = null;              // campo donde escribe el teclado (busqueda o dialogos)
     private android.widget.PopupWindow tecladoPop = null;
+    private android.widget.TextView tecladoPreview = null;
     private final Runnable busquedaPendiente = new Runnable(){ public void run(){ try { filtrarBusqueda(busquedaTexto); } catch (Exception e) {} } };
     private String busquedaTexto = "";
     private View tecladoPanel = null;
@@ -945,11 +946,25 @@ public class MainActivity extends Activity {
     // Arma las teclas dentro de un contenedor. esPopup=true -> boton "Listo" (cierra flotante); false -> "Buscar" (filtra+cierra panel)
     private void armarTeclasEn(android.widget.LinearLayout cont, final boolean esPopup) {
         cont.removeAllViews();
+        final float d = getResources().getDisplayMetrics().density;
+        int hFila = (int)(40 * d);   // alto fijo por fila (compacto, cabe en la pantalla del radio)
+        // BARRA que muestra lo que se escribe (SIEMPRE visible arriba del teclado)
+        android.widget.TextView prev = new android.widget.TextView(this);
+        prev.setTextColor(0xFF888899); prev.setTextSize(19); prev.setSingleLine(true);
+        prev.setBackgroundColor(0xFF000000);
+        int pp=(int)(9*d); prev.setPadding(pp,pp,pp,pp);
+        String ini = (tecladoActivo!=null && tecladoActivo.getText()!=null)? tecladoActivo.getText().toString() : "";
+        prev.setText(ini.length()>0? ini : "Escribe aquí...");
+        if (ini.length()>0) prev.setTextColor(0xFFFFFFFF);
+        android.widget.LinearLayout.LayoutParams plp = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+        plp.setMargins(0,0,0,(int)(6*d)); prev.setLayoutParams(plp);
+        cont.addView(prev);
+        tecladoPreview = prev;
         String[] filas = { "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
         for (int r = 0; r < filas.length; r++) {
             android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
             fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-            fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+            fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, hFila));
             String f2 = filas[r];
             for (int i = 0; i < f2.length(); i++) {
                 final String ch = String.valueOf(f2.charAt(i));
@@ -959,7 +974,7 @@ public class MainActivity extends Activity {
         }
         android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
         fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, hFila));
         fila.addView(crearTeclaAccion("⇧ May", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
         fila.addView(crearTeclaAccion("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
         fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
@@ -967,7 +982,7 @@ public class MainActivity extends Activity {
             android.widget.Button b = crearTeclaAccion("✓ Listo", 2.4f, new Runnable(){ public void run(){ cerrarTecladoPopup(); }});
             b.setTextColor(0xFF1A1A1A);
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-            gd.setColor(accent); gd.setCornerRadius(9 * getResources().getDisplayMetrics().density);
+            gd.setColor(accent); gd.setCornerRadius(9 * d);
             b.setBackgroundDrawable(gd);
             fila.addView(b);
         } else {
@@ -1033,6 +1048,7 @@ public class MainActivity extends Activity {
         if (ch.equals(" ")) c = " ";
         int pos = et.getSelectionStart(); if (pos < 0) pos = et.getText().length();
         try { et.getText().insert(pos, c); } catch (Exception e) { et.append(c); }
+        actualizarPreviewTeclado(et);
     }
     private void borrarTecla() {
         EditText et = (tecladoActivo != null) ? tecladoActivo : etBuscarRef;
@@ -1040,6 +1056,13 @@ public class MainActivity extends Activity {
         int pos = et.getSelectionStart();
         if (pos > 0) { try { et.getText().delete(pos - 1, pos); } catch (Exception e) {} }
         else { int L = et.getText().length(); if (L>0) et.getText().delete(L-1, L); }
+        actualizarPreviewTeclado(et);
+    }
+    private void actualizarPreviewTeclado(EditText et) {
+        if (tecladoPreview == null || et == null) return;
+        String s = (et.getText()!=null)? et.getText().toString() : "";
+        if (s.length()>0) { tecladoPreview.setText(s); tecladoPreview.setTextColor(0xFFFFFFFF); }
+        else { tecladoPreview.setText("Escribe aquí..."); tecladoPreview.setTextColor(0xFF888899); }
     }
     // Teclado FLOTANTE para cualquier campo (dialogos: buscar caratula, renombrar, etc.)
     private void tecladoEnCampo(final EditText et) {
@@ -1058,13 +1081,14 @@ public class MainActivity extends Activity {
         int pad = (int)(8 * getResources().getDisplayMetrics().density);
         cont.setPadding(pad, pad, pad, pad);
         armarTeclasEn(cont, true);
-        int alto = (int)(230 * getResources().getDisplayMetrics().density);
+        int alto = (int)(272 * getResources().getDisplayMetrics().density);
         tecladoPop = new android.widget.PopupWindow(cont, android.view.ViewGroup.LayoutParams.MATCH_PARENT, alto);
         tecladoPop.setFocusable(false);          // NO robar el foco al dialogo (el cursor sigue en el campo)
         tecladoPop.setOutsideTouchable(false);
         try { tecladoPop.showAtLocation(et.getRootView(), android.view.Gravity.BOTTOM, 0, 0); } catch (Exception e) {}
     }
     private void cerrarTecladoPopup() {
+        tecladoPreview = null;
         try { if (tecladoPop != null) { tecladoPop.dismiss(); tecladoPop = null; } } catch (Exception e) {}
     }
     private void mostrarTeclado(boolean ver) {
@@ -1529,17 +1553,37 @@ public class MainActivity extends Activity {
 
     // Reproduce una canción tocada dentro de la carpeta abierta
     private Carpeta carpetaRealDe(Song s) {
+        if (s == null) return null;
         for (Carpeta c : carpetas) {
             if (c.esLista || c == carpetaBusqueda) continue;
-            if (c.songs != null && c.songs.contains(s)) return c;
+            if (c.songs == null) continue;
+            for (Song x : c.songs) {
+                if (x == s) return c;
+                if (x.path != null && s.path != null && x.path.equals(s.path)) return c;   // por ruta (robusto)
+            }
         }
         return null;
     }
+    private int indiceEnLista(ArrayList<Song> lista, Song sel) {
+        if (lista == null || sel == null) return 0;
+        for (int k = 0; k < lista.size(); k++) {
+            Song x = lista.get(k);
+            if (x == sel) return k;
+            if (x != null && x.path != null && sel.path != null && x.path.equals(sel.path)) return k;
+        }
+        return 0;
+    }
     private void reproducirLista(ArrayList<Song> lista, Song sel) {
         if (lista == null || lista.isEmpty()) return;
-        int i = lista.indexOf(sel); if (i < 0) i = 0;
+        int i = indiceEnLista(lista, sel);
         songs.clear(); songs.addAll(lista);
+        // al reproducir desde la carpeta, salir del modo busqueda para que "siguiente" siga esta lista
+        enBusqueda = false;
+        carpetaAbierta = null;
+        cancionesCarpeta = new ArrayList<Song>(lista);
+        boolean sh = shuffle; shuffle = false;   // seguir el ORDEN de la carpeta (no aleatorio)
         construirOrden();
+        shuffle = sh;
         reproducirCancion(i);
         mostrarLista(false);
     }
