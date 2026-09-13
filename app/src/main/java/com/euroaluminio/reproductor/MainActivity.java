@@ -944,23 +944,24 @@ public class MainActivity extends Activity {
         armarTeclasEn((android.widget.LinearLayout) tecladoPanel, false);
     }
     // Arma las teclas dentro de un contenedor. esPopup=true -> boton "Listo" (cierra flotante); false -> "Buscar" (filtra+cierra panel)
+    private boolean tecladoNumeros = false;
+    private android.widget.LinearLayout tecladoContActual = null;
+    private boolean tecladoEsPopupActual = false;
     private void armarTeclasEn(android.widget.LinearLayout cont, final boolean esPopup) {
+        tecladoContActual = cont; tecladoEsPopupActual = esPopup;
         cont.removeAllViews();
+        tecladoPreview = null;
         final float d = getResources().getDisplayMetrics().density;
-        int hFila = (int)(40 * d);   // alto fijo por fila (compacto, cabe en la pantalla del radio)
-        // BARRA que muestra lo que se escribe (SIEMPRE visible arriba del teclado)
-        android.widget.TextView prev = new android.widget.TextView(this);
-        prev.setTextColor(0xFF888899); prev.setTextSize(19); prev.setSingleLine(true);
-        prev.setBackgroundColor(0xFF000000);
-        int pp=(int)(9*d); prev.setPadding(pp,pp,pp,pp);
-        String ini = (tecladoActivo!=null && tecladoActivo.getText()!=null)? tecladoActivo.getText().toString() : "";
-        prev.setText(ini.length()>0? ini : "Escribe aquí...");
-        if (ini.length()>0) prev.setTextColor(0xFFFFFFFF);
-        android.widget.LinearLayout.LayoutParams plp = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
-        plp.setMargins(0,0,0,(int)(6*d)); prev.setLayoutParams(plp);
-        cont.addView(prev);
-        tecladoPreview = prev;
-        String[] filas = { "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
+        int hFila = (int)(48 * d);
+        // FILAS: en canciones (no popup) SIEMPRE numeros + letras. En principal (popup) usa 123/ABC.
+        String[] filas;
+        if (!esPopup) {
+            filas = new String[]{ "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
+        } else if (tecladoNumeros) {
+            filas = new String[]{ "1234567890", "-/:()$&@#", ".,?!+%_\"" };
+        } else {
+            filas = new String[]{ "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
+        }
         for (int r = 0; r < filas.length; r++) {
             android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
             fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
@@ -975,9 +976,20 @@ public class MainActivity extends Activity {
         android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
         fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, hFila));
-        fila.addView(crearTeclaAccion("⇧ May", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; } }));
-        fila.addView(crearTeclaAccion("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
-        fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        if (esPopup && tecladoNumeros) {
+            fila.addView(crearTeclaAccion("ABC", 2f, new Runnable(){ public void run(){ tecladoNumeros = false; armarTeclasEn(tecladoContActual, tecladoEsPopupActual); }}));
+            fila.addView(crearTeclaAccion("Espacio", 4.5f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+            fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        } else if (esPopup) {
+            fila.addView(crearTeclaAccion("123", 1.5f, new Runnable(){ public void run(){ tecladoNumeros = true; armarTeclasEn(tecladoContActual, tecladoEsPopupActual); }}));
+            fila.addView(crearTeclaAccion("⇧ May", 1.7f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; }}));
+            fila.addView(crearTeclaAccion("Espacio", 3.6f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+            fila.addView(crearTeclaAccion("⌫ Borrar", 2f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        } else {
+            fila.addView(crearTeclaAccion("⇧ May", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; }}));
+            fila.addView(crearTeclaAccion("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+            fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
+        }
         if (esPopup) {
             android.widget.Button b = crearTeclaAccion("✓ Listo", 2.4f, new Runnable(){ public void run(){ cerrarTecladoPopup(); }});
             b.setTextColor(0xFF1A1A1A);
@@ -1074,6 +1086,7 @@ public class MainActivity extends Activity {
     }
     private void abrirTecladoPopup(final EditText et) {
         tecladoActivo = et;
+        tecladoNumeros = false;
         try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); imm.hideSoftInputFromWindow(et.getWindowToken(), 0); } catch (Exception e) {}
         android.widget.LinearLayout cont = new android.widget.LinearLayout(this);
         cont.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -1081,7 +1094,7 @@ public class MainActivity extends Activity {
         int pad = (int)(8 * getResources().getDisplayMetrics().density);
         cont.setPadding(pad, pad, pad, pad);
         armarTeclasEn(cont, true);
-        int alto = (int)(272 * getResources().getDisplayMetrics().density);
+        int alto = (int)(214 * getResources().getDisplayMetrics().density);
         tecladoPop = new android.widget.PopupWindow(cont, android.view.ViewGroup.LayoutParams.MATCH_PARENT, alto);
         tecladoPop.setFocusable(false);          // NO robar el foco al dialogo (el cursor sigue en el campo)
         tecladoPop.setOutsideTouchable(false);
@@ -1552,6 +1565,35 @@ public class MainActivity extends Activity {
     }
 
     // Reproduce una canción tocada dentro de la carpeta abierta
+    private String dirDeRuta(String p) {
+        if (p == null) return "";
+        int i = p.lastIndexOf('/');
+        return (i > 0) ? p.substring(0, i) : p;
+    }
+    // Todas las canciones que estan en el MISMO directorio (carpeta real) que sel, en orden por nombre de archivo
+    private ArrayList<Song> cancionesDeLaCarpetaDe(Song sel) {
+        ArrayList<Song> r = new ArrayList<Song>();
+        if (sel == null) return r;
+        String dir = dirDeRuta(sel.path);
+        java.util.HashSet<String> vistos = new java.util.HashSet<String>();
+        for (Carpeta c : carpetas) {
+            if (c.esLista || c == carpetaBusqueda || c.songs == null) continue;
+            for (Song s : c.songs) {
+                if (s.path == null) continue;
+                if (!dirDeRuta(s.path).equals(dir)) continue;
+                if (vistos.contains(s.path)) continue;
+                vistos.add(s.path); r.add(s);
+            }
+        }
+        java.util.Collections.sort(r, new java.util.Comparator<Song>() {
+            public int compare(Song a, Song b) {
+                String pa = a.path != null ? a.path : ""; String pb = b.path != null ? b.path : "";
+                return pa.compareToIgnoreCase(pb);
+            }
+        });
+        if (r.isEmpty()) r.add(sel);
+        return r;
+    }
     private Carpeta carpetaRealDe(Song s) {
         if (s == null) return null;
         for (Carpeta c : carpetas) {
@@ -1619,8 +1661,7 @@ public class MainActivity extends Activity {
         android.widget.LinearLayout.LayoutParams lp1 = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, (int)(56*d));
         lp1.setMargins(0,(int)(4*d),0,(int)(8*d)); b1.setLayoutParams(lp1);
         b1.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            Carpeta c = carpetaRealDe(sel);
-            if (c != null) reproducirLista(c.songs, sel); else reproducirLista(cancionesCarpeta, sel);
+            reproducirLista(cancionesDeLaCarpetaDe(sel), sel);   // canciones del MISMO directorio, en orden
             dlg.dismiss();
         }});
         box.addView(b1);
