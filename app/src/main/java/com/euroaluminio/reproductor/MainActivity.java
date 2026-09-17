@@ -953,15 +953,10 @@ public class MainActivity extends Activity {
         tecladoPreview = null;
         final float d = getResources().getDisplayMetrics().density;
         int hFila = (int)(48 * d);
-        // FILAS: en canciones (no popup) SIEMPRE numeros + letras. En principal (popup) usa 123/ABC.
+        // SOLO letras (o numeros/simbolos si tecladoNumeros). Numeros ocultos tras el boton 123.
         String[] filas;
-        if (!esPopup) {
-            filas = new String[]{ "1234567890", "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
-        } else if (tecladoNumeros) {
-            filas = new String[]{ "1234567890", "-/:()$&@#", ".,?!+%_\"" };
-        } else {
-            filas = new String[]{ "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
-        }
+        if (tecladoNumeros) filas = new String[]{ "1234567890", "-/:()$&@#", ".,?!+%_\"" };
+        else filas = new String[]{ "QWERTYUIOP", "ASDFGHJKLÑ", "ZXCVBNM" };
         for (int r = 0; r < filas.length; r++) {
             android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
             fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
@@ -973,21 +968,18 @@ public class MainActivity extends Activity {
             }
             cont.addView(fila);
         }
+        // fila de acciones
         android.widget.LinearLayout fila = new android.widget.LinearLayout(this);
         fila.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         fila.setLayoutParams(new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, hFila));
-        if (esPopup && tecladoNumeros) {
+        if (tecladoNumeros) {
             fila.addView(crearTeclaAccion("ABC", 2f, new Runnable(){ public void run(){ tecladoNumeros = false; armarTeclasEn(tecladoContActual, tecladoEsPopupActual); }}));
             fila.addView(crearTeclaAccion("Espacio", 4.5f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
             fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
-        } else if (esPopup) {
-            fila.addView(crearTeclaAccion("123", 1.5f, new Runnable(){ public void run(){ tecladoNumeros = true; armarTeclasEn(tecladoContActual, tecladoEsPopupActual); }}));
-            fila.addView(crearTeclaAccion("⇧ May", 1.7f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; }}));
-            fila.addView(crearTeclaAccion("Espacio", 3.6f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
-            fila.addView(crearTeclaAccion("⌫ Borrar", 2f, new Runnable(){ public void run(){ borrarTecla(); }}));
         } else {
-            fila.addView(crearTeclaAccion("⇧ May", 1.8f, new Runnable(){ public void run(){ tecladoMayus = !tecladoMayus; }}));
-            fila.addView(crearTeclaAccion("Espacio", 4f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
+            // el boton 123 va donde iba Mayus (Mayus se quita: la busqueda no distingue mayus/minus)
+            fila.addView(crearTeclaAccion("123", 1.8f, new Runnable(){ public void run(){ tecladoNumeros = true; armarTeclasEn(tecladoContActual, tecladoEsPopupActual); }}));
+            fila.addView(crearTeclaAccion("Espacio", 4.6f, new Runnable(){ public void run(){ escribirTecla(" "); }}));
             fila.addView(crearTeclaAccion("⌫ Borrar", 2.2f, new Runnable(){ public void run(){ borrarTecla(); }}));
         }
         if (esPopup) {
@@ -1056,7 +1048,7 @@ public class MainActivity extends Activity {
     private void escribirTecla(String ch) {
         EditText et = (tecladoActivo != null) ? tecladoActivo : etBuscarRef;
         if (et == null) return;
-        String c = tecladoMayus ? ch.toUpperCase(java.util.Locale.US) : ch.toLowerCase(java.util.Locale.US);
+        String c = ch.toLowerCase(java.util.Locale.US);   // siempre minuscula (la busqueda no distingue mayus/minus)
         if (ch.equals(" ")) c = " ";
         int pos = et.getSelectionStart(); if (pos < 0) pos = et.getText().length();
         try { et.getText().insert(pos, c); } catch (Exception e) { et.append(c); }
@@ -1105,6 +1097,7 @@ public class MainActivity extends Activity {
         try { if (tecladoPop != null) { tecladoPop.dismiss(); tecladoPop = null; } } catch (Exception e) {}
     }
     private void mostrarTeclado(boolean ver) {
+        if (ver) { tecladoNumeros = false; try { construirTeclado(); } catch (Exception e) {} }
         if (tecladoPanel == null) return;
         // esconder SIEMPRE el teclado del sistema
         try { android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE); if (etBuscarRef != null) imm.hideSoftInputFromWindow(etBuscarRef.getWindowToken(), 0); } catch (Exception e) {}
@@ -3664,7 +3657,7 @@ public class MainActivity extends Activity {
         etC.setHint("Canción"); etC.setText(cancionIni != null ? cancionIni : ""); etC.setSingleLine(true);
         tecladoEnCampo(etA); tecladoEnCampo(etC);   // usar NUESTRO teclado (con Borrar), no el del radio
         box.addView(msg); box.addView(etA); box.addView(etC);
-        new AlertDialog.Builder(this).setTitle("Buscar nombre correcto").setView(box)
+        android.app.AlertDialog dCar = new AlertDialog.Builder(this).setTitle("Buscar nombre correcto").setView(box)
             .setPositiveButton("Buscar", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface dg, int w) {
                     cerrarTecladoPopup();
@@ -3673,7 +3666,9 @@ public class MainActivity extends Activity {
             })
             .setNegativeButton("Cancelar", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface dg, int w) { cerrarTecladoPopup(); }
-            }).show();
+            }).create();
+        try { dCar.getWindow().setGravity(android.view.Gravity.TOP); } catch (Exception e) {}
+        dCar.show();
     }
     private void mostrarSugerencias(final Song s, final java.util.ArrayList<String[]> items, final java.util.ArrayList<android.graphics.Bitmap> thumbs) {
         final float d = getResources().getDisplayMetrics().density;
