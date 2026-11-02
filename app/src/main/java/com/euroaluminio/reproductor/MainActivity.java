@@ -191,6 +191,7 @@ public class MainActivity extends Activity {
         }
     }
     private void apagarServidorWifi() {
+        restaurarVolumen("Control apagado");
         try { if (servidor != null) servidor.detener(); } catch (Exception e) {}
         servidor = null;
         soltarCandadosWifi();
@@ -319,13 +320,9 @@ public class MainActivity extends Activity {
         boolean sonando = false; int pos = 0, dur = 0;
         try { if (mp != null && prepared) { sonando = mp.isPlaying(); pos = mp.getCurrentPosition(); dur = mp.getDuration(); } } catch (Exception e) {}
         o.put("sonando", sonando); o.put("pos", pos); o.put("dur", dur);
-        try {
-            o.put("vol", am.getStreamVolume(AudioManager.STREAM_MUSIC));
-            o.put("volMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
-        } catch (Exception e) {}
         o.put("aleatorio", modoAleat);          // 0 en orden, 1 carpeta, 2 todo el USB
         o.put("repetir", repeat == 1);
-        o.put("volApp", Math.round(volApp * 100));
+        o.put("volApp", Math.round(volumenApp() * 100));
         return o.toString();
     }
     private org.json.JSONObject itemCancion(int c, int i, Song s) throws Exception {
@@ -411,6 +408,7 @@ public class MainActivity extends Activity {
                 return r[0];
             }
             public String api(final String ruta) {
+                ultimoContactoCel = System.currentTimeMillis();   // el celular sigue conectado
                 final java.util.HashMap<String,String> p = parametros(ruta);
                 if (ruta.startsWith("/api/buscar")) return buscarRemoto(p.get("q"));   // en segundo plano (no congela el radio)
                 return enUi(new java.util.concurrent.Callable<String>() { public String call() throws Exception {
@@ -944,6 +942,7 @@ public class MainActivity extends Activity {
         handler.postDelayed(new Runnable(){ public void run(){
             try { if (prefs.getBoolean("wifiAuto", true)) iniciarServidorWifi(); } catch (Throwable e) {}
         }}, 3000);
+        handler.postDelayed(vigilaControl, 5000);   // volumen vuelve al 100% si se pierde el celular
         final CheckBox chkVolArranque = (CheckBox) findViewById(R.id.chkVolArranque);
         final CheckBox chkAutoDetectar = (CheckBox) findViewById(R.id.chkAutoDetectar);
         chkResume.setChecked(optResume); chkAutoplay.setChecked(optAutoplay); chkPausaUsb.setChecked(optPausaUsb); chkPantalla.setChecked(optPantalla);
@@ -2057,18 +2056,33 @@ public class MainActivity extends Activity {
         if (erroresSeguidos >= Math.max(1, songs.size())) { erroresSeguidos = 0; try { pintarPlay(false); } catch (Exception e) {} return; }
         handler.postDelayed(new Runnable(){ public void run(){ try { siguiente(false); } catch (Exception e) {} } }, 400);
     }
-    private float volApp = 1f;   // volumen del reproductor 0..1 (funciona siempre)
-    private void aplicarVolApp() { try { if (mp != null) mp.setVolume(volApp, volApp); } catch (Exception e) {} }
+    // Volumen del REPRODUCTOR (0..1). El volumen del sistema lo ignora el radio Honda, por eso no se usa.
+    private float volApp = -1f;
+    private float volumenApp() {
+        if (volApp < 0f) volApp = 1f;   // al abrir la app: siempre 100% del volumen de la perilla
+        return volApp;
+    }
+    private void aplicarVolApp() { try { if (mp != null) { float v = volumenApp(); mp.setVolume(v, v); } } catch (Exception e) {} }
+    private volatile long ultimoContactoCel = 0;
+    private void restaurarVolumen(String motivo) {
+        if (volumenApp() >= 0.999f) return;
+        volApp = 1f;
+        aplicarVolApp();
+        try { Toast.makeText(this, motivo + ": volumen normal (100%)", Toast.LENGTH_LONG).show(); } catch (Exception e) {}
+    }
+    private final Runnable vigilaControl = new Runnable() { public void run() {
+        try {
+            if (volumenApp() < 0.999f) {
+                // solo desconexiones reales: se apaga el celular/hotspot o se cae el WiFi (pantalla bloqueada NO cuenta)
+                if (ipWifi() == null) restaurarVolumen("Se desconectó el celular");
+            }
+        } catch (Throwable e) {}
+        handler.postDelayed(this, 5000);
+    }};
     private void cambiarVolumen(boolean subir) {
-        int antes = -1, despues = -1;
-        try { antes = am.getStreamVolume(AudioManager.STREAM_MUSIC); } catch (Exception e) {}
-        if (subir) {
-            if (volApp < 0.999f) volApp = Math.min(1f, volApp + 0.1f);   // primero recupera el del reproductor
-            else { try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0); } catch (Exception e) {} }
-        } else {
-            try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0); despues = am.getStreamVolume(AudioManager.STREAM_MUSIC); } catch (Exception e) {}
-            if (despues == antes || despues < 0) volApp = Math.max(0f, volApp - 0.1f);   // el radio no dejo bajar: baja el del reproductor
-        }
+        float v = volumenApp() + (subir ? 0.1f : -0.1f);
+        v = Math.round(Math.max(0f, Math.min(1f, v)) * 10f) / 10f;   // pasos exactos de 10%
+        volApp = v;
         aplicarVolApp();
     }
     private void cargarYReproducir() {
@@ -4657,6 +4671,7 @@ public class MainActivity extends Activity {
     }
     protected void onDestroy() {
         super.onDestroy();
+        try { handler.removeCallbacks(vigilaControl); } catch (Exception e) {}
         handler.removeCallbacks(actualizador);
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}
         try { if (netReceiver != null) unregisterReceiver(netReceiver); } catch (Exception e) {}

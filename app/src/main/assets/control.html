@@ -34,6 +34,17 @@ button{font-family:inherit;cursor:pointer}
 .fila button{flex:1;border:none;border-radius:12px;background:#1c1c26;color:#f4f4f8;padding:13px 4px;font-size:14px;font-weight:bold}
 .fila button.on{background:#2e2614;color:#FFB020;box-shadow:inset 0 0 0 1px #FFB02066}
 .etq{font-size:12px;color:#8b8b9a;margin:10px 2px 6px}
+button{transition:transform .12s, filter .12s, background .2s}
+button:active{transform:scale(.93);filter:brightness(1.25)}
+.volfila{display:flex;align-items:center;gap:10px;margin:4px 0 14px}
+.volbtn{width:74px;height:64px;border:none;border-radius:16px;background:#262633;color:#f4f4f8;font-size:30px;font-weight:bold;flex:none}
+.volbtn.pulso{animation:pulso .35s ease-out}
+@keyframes pulso{0%{transform:scale(.86);background:#FFB020;color:#1a1a1a}100%{transform:scale(1);background:#262633;color:#f4f4f8}}
+.medidor{flex:1;height:64px;border-radius:16px;background:#1c1c26;position:relative;overflow:hidden}
+.medidor i{position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(90deg,#b87a0c,#FFB020);transition:width .3s ease}
+.medidor span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;color:#fff;text-shadow:0 1px 3px #000a}
+.medidor.salto span{animation:salto .35s ease-out}
+@keyframes salto{0%{transform:scale(1.3)}100%{transform:scale(1)}}
 .vol{font-size:13px;color:#8b8b9a;text-align:center;margin:2px 0 14px}
 .tabs{display:flex;gap:8px;margin:16px 0 10px}
 .tabs button{flex:1;border:none;border-radius:12px;padding:12px 0;font-size:15px;font-weight:bold;background:#1c1c26;color:#9a9aa8}
@@ -52,7 +63,7 @@ button{font-family:inherit;cursor:pointer}
 .mini.rojo{color:#ff7b7b}
 .volver{color:#FFB020;font-weight:bold}
 .vacio{padding:18px;text-align:center;color:#8b8b9a;font-size:14px}
-.nueva{width:100%;border:none;border-radius:12px;background:#FFB020;color:#1a1a1a;font-weight:bold;font-size:15px;padding:13px;margin-bottom:10px}
+.nueva{flex:1;width:100%;border:none;border-radius:12px;background:#FFB020;color:#1a1a1a;font-weight:bold;font-size:15px;padding:13px;margin-bottom:10px}
 .aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#262633;color:#f4f4f8;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9}
 .aviso.ver{opacity:1}
 .velo{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;justify-content:center;z-index:8}
@@ -85,12 +96,11 @@ button{font-family:inherit;cursor:pointer}
     <button onclick="cmd('next')" aria-label="Siguiente">&#9197;</button>
   </div>
 
-  <div class="fila">
-    <button onclick="cmd('voldown')">Vol &minus;</button>
-    <button onclick="cmd('volup')">Vol +</button>
-    <button onclick="agregarActual()">+ Lista</button>
+  <div class="volfila">
+    <button class="volbtn" id="vmenos" onclick="volumen(-1,this)" aria-label="Bajar volumen">&minus;</button>
+    <div class="medidor" id="medidor"><i id="vbarra"></i><span id="vtexto">Volumen 100%</span></div>
+    <button class="volbtn" id="vmas" onclick="volumen(1,this)" aria-label="Subir volumen">+</button>
   </div>
-  <div class="vol" id="vol"></div>
 
   <div class="etq">Al terminar la canción</div>
   <div class="fila">
@@ -110,7 +120,7 @@ button{font-family:inherit;cursor:pointer}
   <div class="buscar" id="cajaB" style="display:none">
     <input id="q" type="search" placeholder="Artista o canción..." autocomplete="off">
   </div>
-  <div id="cajaL" style="display:none"><button class="nueva" onclick="nuevaLista()">+ Nueva lista</button></div>
+  <div id="cajaL" style="display:none" class="fila"><button class="nueva" onclick="nuevaLista()">+ Nueva lista</button><button class="nueva" style="background:#262633;color:#FFB020" onclick="agregarActual()">+ Agregar la que suena</button></div>
   <div class="lista" id="lista"><div class="vacio">Cargando...</div></div>
 </div>
 
@@ -149,10 +159,24 @@ function pintar(d){
   for (var i = 0; i < 3; i++) $('m' + i).className = (d.aleatorio === i) ? 'on' : '';
   $('brep').className = d.repetir ? 'on' : '';
   $('brep').textContent = 'Repetir esta canción: ' + (d.repetir ? 'Sí' : 'No');
-  var v = 'Volumen del reproductor ' + (d.volApp != null ? d.volApp : 100) + '%';
-  if (d.volMax) v += ' · Radio ' + d.vol + '/' + d.volMax;
-  $('vol').textContent = v;
+  if (!volEsperando) mostrarVol(d.volApp != null ? d.volApp : 100, false);
   if (d.id !== ultimoId) { ultimoId = d.id; $('cov').style.backgroundImage = d.id ? 'url(/caratula?v=' + d.id + ')' : 'none'; }
+}
+var volActual = 100, volEsperando = 0;
+function mostrarVol(v, animar){
+  volActual = v;
+  $('vbarra').style.width = v + '%';
+  $('vtexto').textContent = v === 0 ? 'Silencio' : 'Volumen ' + v + '%';
+  if (animar) { var m = $('medidor'); m.className = 'medidor'; void m.offsetWidth; m.className = 'medidor salto'; }
+}
+function volumen(dir, btn){
+  btn.className = 'volbtn'; void btn.offsetWidth; btn.className = 'volbtn pulso';
+  if (navigator.vibrate) { try { navigator.vibrate(25); } catch(e){} }
+  var nuevo = Math.max(0, Math.min(100, volActual + dir * 10));
+  if (nuevo === volActual) { aviso(dir > 0 ? 'Ya está al máximo (sube con la perilla del radio)' : 'Ya está en silencio'); }
+  mostrarVol(nuevo, true);   // se ve al instante, sin esperar al radio
+  volEsperando++;
+  pedir('/api/cmd?a=' + (dir > 0 ? 'volup' : 'voldown'), function(d){ volEsperando--; if (d && !volEsperando) mostrarVol(d.volApp, false); pintar(d); });
 }
 function estado(){ pedir('/api/estado', pintar); }
 function cmd(a){ pedir('/api/cmd?a=' + a, pintar); }
@@ -209,7 +233,7 @@ $('q').addEventListener('input', function(){ clearTimeout(tBusq); tBusq = setTim
 /* ---- Listas ---- */
 function verListas(){
   listaAbierta = null;
-  $('cajaL').style.display = 'block';
+  $('cajaL').style.display = 'flex';
   $('lista').innerHTML = '<div class="vacio">Cargando...</div>';
   pedir('/api/listas', function(arr){
     if (!arr) { $('lista').innerHTML = '<div class="vacio">No se pudo cargar</div>'; return; }
