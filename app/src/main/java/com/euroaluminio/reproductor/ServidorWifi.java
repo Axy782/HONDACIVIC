@@ -14,6 +14,10 @@ import java.net.Socket;
 public class ServidorWifi {
 
     public interface Callback { void archivoRecibido(String nombre); java.io.File carpetaDestino(String nombre); }
+    // Control remoto desde el celular (pagina + API JSON + caratula)
+    public interface Control { String api(String ruta); byte[] caratula(); String paginaControl(); }
+    private volatile Control control;
+    public void setControl(Control c) { this.control = c; }
 
     private final Callback cb;
     private ServerSocket server;
@@ -102,8 +106,22 @@ public class ServidorWifi {
                         if (err.length() == 0) err = "Se cortó la subida"; }
                 } catch (Throwable t) { ok = false; err = "" + t; }
                 responder(out, ok ? "200 OK" : "500 Error", "text/plain; charset=utf-8", ok ? "OK" : ("ERROR: " + err));
-            } else {
+            } else if (ruta.startsWith("/api/") && control != null) {
+                String json;
+                try { json = control.api(ruta); } catch (Throwable t) { json = "{\"error\":\"" + t + "\"}"; }
+                if (json == null) json = "{}";
+                responder(out, "200 OK", "application/json; charset=utf-8", json);
+            } else if (ruta.startsWith("/caratula") && control != null) {
+                byte[] img = null;
+                try { img = control.caratula(); } catch (Throwable t) {}
+                if (img != null) responderBytes(out, "200 OK", "image/jpeg", img);
+                else responder(out, "404 Not Found", "text/plain", "sin caratula");
+            } else if (ruta.startsWith("/enviar") || control == null) {
                 responder(out, "200 OK", "text/html; charset=utf-8", paginaHtml());
+            } else {
+                String pag = null;
+                try { pag = control.paginaControl(); } catch (Throwable t) {}
+                responder(out, "200 OK", "text/html; charset=utf-8", pag != null ? pag : paginaHtml());
             }
             out.flush();
             s.close();
@@ -131,6 +149,17 @@ public class ServidorWifi {
         h.append("Connection: close\r\n");
         h.append("Access-Control-Allow-Origin: *\r\n");
         h.append("\r\n");
+        out.write(h.toString().getBytes("UTF-8"));
+        out.write(b);
+    }
+
+    private void responderBytes(OutputStream out, String estado, String tipo, byte[] b) throws Exception {
+        StringBuilder h = new StringBuilder();
+        h.append("HTTP/1.1 ").append(estado).append("\r\n");
+        h.append("Content-Type: ").append(tipo).append("\r\n");
+        h.append("Content-Length: ").append(b.length).append("\r\n");
+        h.append("Cache-Control: no-cache\r\n");
+        h.append("Connection: close\r\n\r\n");
         out.write(h.toString().getBytes("UTF-8"));
         out.write(b);
     }
@@ -175,7 +204,8 @@ public class ServidorWifi {
             + ".fila{padding:10px 0;border-bottom:1px solid #2a2a36;font-size:14px}"
             + ".ok{color:#4ecb7a}.err{color:#ff6b6b}.prog{color:#7fb0ff}"
             + "</style></head><body>"
-            + "<h1>Enviar al radio</h1>"
+            + "<a href='/' style='color:#FFB020;text-decoration:none;font-size:15px'>&larr; Control del radio</a>"
+            + "<h1 style='margin-top:12px'>Enviar al radio</h1>"
             + "<p>Canciones (MP3) &rarr; carpeta Descarga. Videos (MP4) &rarr; carpeta Videos. APK y otros archivos &rarr; carpeta Archivos. Todo en la memoria USB.</p>"
             + "<input id='f' type='file' accept='*/*' multiple style='display:none'>"
             + "<button class='btn' onclick=\"document.getElementById('f').click()\">+ Elegir archivos (musica, video, APK...)</button>"

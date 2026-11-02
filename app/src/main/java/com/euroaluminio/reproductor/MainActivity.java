@@ -173,22 +173,41 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Este radio no tiene navegador para abrir YouTube", Toast.LENGTH_LONG).show();
         }
     }
-    private void alternarServidorWifi() {
-        if (servidor != null && servidor.activo()) {
-            servidor.detener(); servidor = null;
-            soltarCandadosWifi();
-            Toast.makeText(this, "WiFi apagado", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String ip = ipWifi();
-        if (ip == null) {
-            new AlertDialog.Builder(this).setTitle("Sin WiFi")
-                .setMessage("El radio no está conectado a una red WiFi. Conéctalo primero y vuelve a intentar.")
-                .setPositiveButton("OK", null).show();
-            return;
-        }
+    // Enciende el servidor del celular sin mostrar nada (sirve para encender solo al abrir la app)
+    private boolean iniciarServidorWifi() {
+        if (servidor != null && servidor.activo()) return true;
         try {
-            servidor = new ServidorWifi(new ServidorWifi.Callback() {
+            servidor = new ServidorWifi(crearCallbackWifi());
+            servidor.setControl(crearControlRemoto());   // control desde el celular
+            servidor.iniciar();
+            tomarCandadosWifi();   // mantener WiFi despierto
+            pintarEstadoWifi();
+            return true;
+        } catch (Exception e) {
+            servidor = null;
+            soltarCandadosWifi();
+            pintarEstadoWifi();
+            return false;
+        }
+    }
+    private void apagarServidorWifi() {
+        try { if (servidor != null) servidor.detener(); } catch (Exception e) {}
+        servidor = null;
+        soltarCandadosWifi();
+        pintarEstadoWifi();
+    }
+    private void pintarEstadoWifi() {
+        try {
+            TextView tv = (TextView) findViewById(R.id.txtWifiDir);
+            if (tv == null) return;
+            if (servidor == null || !servidor.activo()) { tv.setText("Control apagado"); return; }
+            String ip = ipWifi();
+            tv.setText(ip != null ? ("Encendido: http://" + ip + ":" + servidor.puerto)
+                                  : "Encendido. Conecta el radio al hotspot del celular para ver la dirección.");
+        } catch (Exception e) {}
+    }
+    private ServidorWifi.Callback crearCallbackWifi() {
+        return new ServidorWifi.Callback() {
                 public java.io.File carpetaDestino(String nombre) {
                     String n = (nombre == null) ? "" : nombre.toLowerCase(java.util.Locale.US);
                     if (n.endsWith(".mp4") || n.endsWith(".3gp") || n.endsWith(".m4v") || n.endsWith(".mkv")
@@ -213,44 +232,255 @@ public class MainActivity extends Activity {
                         if (!noMusica) escanearMusica();   // solo re-escanear si es musica/video
                     }});
                 }
-            });
-            servidor.iniciar();
-            tomarCandadosWifi();   // mantener WiFi despierto hasta que se apague a mano
-            final String url = "http://" + ip + ":" + servidor.puerto;
-            float dens = getResources().getDisplayMetrics().density;
-            android.widget.LinearLayout ly = new android.widget.LinearLayout(this);
-            ly.setOrientation(android.widget.LinearLayout.VERTICAL);
-            ly.setGravity(android.view.Gravity.CENTER);
-            int pad = (int) (10 * dens); ly.setPadding(pad, pad, pad, pad);
-            TextView tv1 = new TextView(this);
-            tv1.setText("Escanea el QR con la cámara, o escribe la dirección de abajo:");
-            tv1.setTextColor(0xFFF4F4F8); tv1.setGravity(android.view.Gravity.CENTER); tv1.setTextSize(13);
-            ImageView iv = new ImageView(this);
-            Bitmap qr = generarQR(url, 400);
-            if (qr != null) iv.setImageBitmap(qr);
-            int qs = (int) (150 * dens);   // QR más chico para que quepa la dirección
-            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(qs, qs);
-            lp.topMargin = (int) (8 * dens); lp.bottomMargin = (int) (8 * dens); iv.setLayoutParams(lp);
-            TextView tv2 = new TextView(this);
-            tv2.setText(url);
-            tv2.setTextColor(0xFFFFB300); tv2.setGravity(android.view.Gravity.CENTER);
-            tv2.setTextSize(24); tv2.setTypeface(null, android.graphics.Typeface.BOLD);
-            TextView tv3 = new TextView(this);
-            tv3.setText("(si tu celular no lee QR, escribe esa dirección en el navegador)");
-            tv3.setTextColor(0xFF8B8B9A); tv3.setGravity(android.view.Gravity.CENTER); tv3.setTextSize(11);
-            tv3.setPadding(0, (int)(4*dens), 0, 0);
-            ly.addView(tv1); ly.addView(iv); ly.addView(tv2); ly.addView(tv3);
-            android.widget.ScrollView sv = new android.widget.ScrollView(this);
-            sv.addView(ly);
-            new AlertDialog.Builder(this)
-                .setTitle("Recibir por WiFi — ACTIVO")
-                .setView(sv)
-                .setPositiveButton("Entendido", null).show();
-        } catch (Exception e) {
-            Toast.makeText(this, "No se pudo iniciar: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            servidor = null;
-            soltarCandadosWifi();
+            };
+    }
+    // Boton de Ajustes: enciende (si hace falta) y muestra el QR con la direccion
+    private void alternarServidorWifi() {
+        if (!iniciarServidorWifi()) {
+            Toast.makeText(this, "No se pudo encender el control", Toast.LENGTH_LONG).show();
+            return;
         }
+        String ip = ipWifi();
+        if (ip == null) {
+            new AlertDialog.Builder(this).setTitle("Control encendido")
+                .setMessage("El radio todavía no está conectado a una red WiFi. Prende el hotspot del celular, conecta el radio a esa red y vuelve a tocar este botón para ver la dirección.")
+                .setPositiveButton("OK", null)
+                .setNegativeButton("Apagar control", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) { apagarServidorWifi(); }
+                }).show();
+            return;
+        }
+        final String url = "http://" + ip + ":" + servidor.puerto;
+        float dens = getResources().getDisplayMetrics().density;
+        android.widget.LinearLayout ly = new android.widget.LinearLayout(this);
+        ly.setOrientation(android.widget.LinearLayout.VERTICAL);
+        ly.setGravity(android.view.Gravity.CENTER);
+        int pad = (int) (10 * dens); ly.setPadding(pad, pad, pad, pad);
+        TextView tv1 = new TextView(this);
+        tv1.setText("En el celular escanea el QR o escribe la dirección. Ahí controlas el radio y envías archivos:");
+        tv1.setTextColor(0xFFF4F4F8); tv1.setGravity(android.view.Gravity.CENTER); tv1.setTextSize(13);
+        ImageView iv = new ImageView(this);
+        Bitmap qr = generarQR(url, 400);
+        if (qr != null) iv.setImageBitmap(qr);
+        int qs = (int) (150 * dens);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(qs, qs);
+        lp.topMargin = (int) (8 * dens); lp.bottomMargin = (int) (8 * dens); iv.setLayoutParams(lp);
+        TextView tv2 = new TextView(this);
+        tv2.setText(url);
+        tv2.setTextColor(0xFFFFB300); tv2.setGravity(android.view.Gravity.CENTER);
+        tv2.setTextSize(24); tv2.setTypeface(null, android.graphics.Typeface.BOLD);
+        TextView tv3 = new TextView(this);
+        tv3.setText("(si tu celular no lee QR, escribe esa dirección en el navegador)");
+        tv3.setTextColor(0xFF8B8B9A); tv3.setGravity(android.view.Gravity.CENTER); tv3.setTextSize(11);
+        tv3.setPadding(0, (int)(4*dens), 0, 0);
+        ly.addView(tv1); ly.addView(iv); ly.addView(tv2); ly.addView(tv3);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(ly);
+        new AlertDialog.Builder(this)
+            .setTitle("Control por WiFi — ENCENDIDO")
+            .setView(sv)
+            .setPositiveButton("Entendido", null)
+            .setNegativeButton("Apagar control", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) { apagarServidorWifi(); Toast.makeText(MainActivity.this, "Control apagado", Toast.LENGTH_SHORT).show(); }
+            }).show();
+    }
+    // ===== CONTROL REMOTO DESDE EL CELULAR =====
+    private String paginaControlCache = null;
+    // Ejecuta en el hilo de la pantalla y espera el resultado (max 3 s)
+    private String enUi(final java.util.concurrent.Callable<String> c) {
+        final String[] res = new String[]{ "{}" };
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        runOnUiThread(new Runnable() { public void run() {
+            try { res[0] = c.call(); } catch (Throwable e) { res[0] = "{\"error\":\"" + e + "\"}"; }
+            latch.countDown();
+        }});
+        try { latch.await(3, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) {}
+        return res[0];
+    }
+    private java.util.HashMap<String,String> parametros(String ruta) {
+        java.util.HashMap<String,String> m = new java.util.HashMap<String,String>();
+        int q = ruta.indexOf('?'); if (q < 0) return m;
+        for (String par : ruta.substring(q + 1).split("&")) {
+            int e = par.indexOf('=');
+            try {
+                if (e > 0) m.put(par.substring(0, e), java.net.URLDecoder.decode(par.substring(e + 1), "UTF-8"));
+                else m.put(par, "");
+            } catch (Exception ex) {}
+        }
+        return m;
+    }
+    private int entero(String s, int def) { try { return Integer.parseInt(s); } catch (Exception e) { return def; } }
+    private String estadoJson() throws Exception {
+        org.json.JSONObject o = new org.json.JSONObject();
+        Song s = cancionActual();
+        o.put("titulo", s != null ? (s.title != null && s.title.length() > 0 ? s.title : nombreDe(s)) : "");
+        o.put("artista", s != null && s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
+        o.put("id", s != null && s.path != null ? Integer.toHexString(s.path.hashCode()) : "");
+        boolean sonando = false; int pos = 0, dur = 0;
+        try { if (mp != null && prepared) { sonando = mp.isPlaying(); pos = mp.getCurrentPosition(); dur = mp.getDuration(); } } catch (Exception e) {}
+        o.put("sonando", sonando); o.put("pos", pos); o.put("dur", dur);
+        try {
+            o.put("vol", am.getStreamVolume(AudioManager.STREAM_MUSIC));
+            o.put("volMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+        } catch (Exception e) {}
+        o.put("aleatorio", shuffle);
+        return o.toString();
+    }
+    private org.json.JSONObject itemCancion(int c, int i, Song s) throws Exception {
+        org.json.JSONObject o = new org.json.JSONObject();
+        o.put("c", c); o.put("s", i);
+        o.put("t", s.title != null && s.title.length() > 0 ? s.title : nombreDe(s));
+        o.put("a", s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
+        return o;
+    }
+    // Busqueda pedida desde el celular: copia rapida en la pantalla, comparacion en el hilo del servidor
+    private String buscarRemoto(String qraw) {
+        final String q = limpiarTexto(qraw != null ? qraw : "");
+        org.json.JSONArray arr = new org.json.JSONArray();
+        if (q.length() == 0) return arr.toString();
+        final ArrayList<Song> lista = new ArrayList<Song>();
+        final ArrayList<int[]> pos = new ArrayList<int[]>();
+        enUi(new java.util.concurrent.Callable<String>() { public String call() {
+            for (int ci = 0; ci < carpetas.size(); ci++) {
+                Carpeta c = carpetas.get(ci);
+                if (c.esLista || c == carpetaBusqueda || c.songs == null) continue;
+                for (int i = 0; i < c.songs.size(); i++) { lista.add(c.songs.get(i)); pos.add(new int[]{ ci, i }); }
+            }
+            return "";
+        }});
+        try {
+            String[] palabras = q.split(" ");
+            String qJunto = q.replace(" ", "");
+            for (int k = 0; k < lista.size() && arr.length() < 100; k++) {
+                Song s = lista.get(k);
+                prepararBuscable(s);
+                boolean ok = true;
+                for (String w : palabras) { if (w.length() > 0 && s.buscable.indexOf(w) < 0) { ok = false; break; } }
+                if (!ok && qJunto.length() >= 2 && s.buscableJunto.indexOf(qJunto) >= 0) ok = true;
+                if (ok) arr.put(itemCancion(pos.get(k)[0], pos.get(k)[1], s));
+            }
+        } catch (Throwable e) {}
+        return arr.toString();
+    }
+    private ServidorWifi.Control crearControlRemoto() {
+        return new ServidorWifi.Control() {
+            public String paginaControl() {
+                if (paginaControlCache == null) {
+                    try {
+                        java.io.InputStream in = getAssets().open("control.html");
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        byte[] b = new byte[8192]; int n;
+                        while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                        in.close();
+                        paginaControlCache = new String(bo.toByteArray(), "UTF-8");
+                    } catch (Exception e) { return null; }
+                }
+                return paginaControlCache;
+            }
+            public byte[] caratula() {
+                final byte[][] r = new byte[1][];
+                enUi(new java.util.concurrent.Callable<String>() { public String call() {
+                    try {
+                        Bitmap b = portadaActualBmp;
+                        if (b == null) return "";
+                        int w = b.getWidth(), h = b.getHeight(), mx = Math.max(w, h);
+                        if (mx > 400) b = Bitmap.createScaledBitmap(b, w * 400 / mx, h * 400 / mx, true);
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        b.compress(Bitmap.CompressFormat.JPEG, 80, bo);
+                        r[0] = bo.toByteArray();
+                    } catch (Throwable e) {}
+                    return "";
+                }});
+                return r[0];
+            }
+            public String api(final String ruta) {
+                final java.util.HashMap<String,String> p = parametros(ruta);
+                if (ruta.startsWith("/api/buscar")) return buscarRemoto(p.get("q"));   // en segundo plano (no congela el radio)
+                return enUi(new java.util.concurrent.Callable<String>() { public String call() throws Exception {
+                    if (ruta.startsWith("/api/estado")) return estadoJson();
+                    if (ruta.startsWith("/api/cmd")) {
+                        String a = p.get("a"); if (a == null) a = "";
+                        if (a.equals("toggle")) toggle();
+                        else if (a.equals("next")) siguiente(false);
+                        else if (a.equals("prev")) anterior();
+                        else if (a.equals("volup")) am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0);
+                        else if (a.equals("voldown")) am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0);
+                        else if (a.equals("aleatorio")) { try { btnShuffle.performClick(); } catch (Exception e) {} }
+                        else if (a.equals("seek")) {
+                            int ms = entero(p.get("ms"), -1);
+                            try { if (mp != null && prepared && ms >= 0) { mp.seekTo(Math.min(ms, mp.getDuration())); seek.setProgress(mp.getCurrentPosition()); } } catch (Exception e) {}
+                        }
+                        return estadoJson();
+                    }
+                    if (ruta.startsWith("/api/carpetas")) {
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        for (int i = 0; i < carpetas.size(); i++) {
+                            Carpeta c = carpetas.get(i);
+                            if (c.esLista || c.songs == null || c.songs.isEmpty()) continue;
+                            org.json.JSONObject o = new org.json.JSONObject();
+                            o.put("c", i); o.put("n", c.name); o.put("total", c.songs.size());
+                            arr.put(o);
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/canciones")) {
+                        int c = entero(p.get("c"), -1);
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        if (c >= 0 && c < carpetas.size()) {
+                            ArrayList<Song> ls = carpetas.get(c).songs;
+                            for (int i = 0; i < ls.size(); i++) arr.put(itemCancion(c, i, ls.get(i)));
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/buscar")) {
+                        String q = limpiarTexto(p.get("q") != null ? p.get("q") : "");
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        if (q.length() == 0) return arr.toString();
+                        String[] palabras = q.split(" ");
+                        String qJunto = q.replace(" ", "");
+                        for (int ci = 0; ci < carpetas.size() && arr.length() < 100; ci++) {
+                            Carpeta c = carpetas.get(ci);
+                            if (c.esLista || c == carpetaBusqueda || c.songs == null) continue;
+                            for (int i = 0; i < c.songs.size() && arr.length() < 100; i++) {
+                                Song s = c.songs.get(i);
+                                if (s.buscable == null) {
+                                    s.buscable = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+                                    s.buscableJunto = s.buscable.replace(" ", "");
+                                }
+                                boolean todas = true;
+                                for (String w : palabras) { if (w.length() > 0 && s.buscable.indexOf(w) < 0) { todas = false; break; } }
+                                if (!todas && qJunto.length() >= 2 && s.buscableJunto.indexOf(qJunto) >= 0) todas = true;
+                                if (todas) arr.put(itemCancion(ci, i, s));
+                            }
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/tocar")) {
+                        int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1);
+                        if (c >= 0 && c < carpetas.size()) {
+                            ArrayList<Song> ls = carpetas.get(c).songs;
+                            if (i >= 0 && i < ls.size()) {
+                                Song sel = ls.get(i);
+                                if ("1".equals(p.get("artista"))) {
+                                    ArrayList<Song> delArtista = new ArrayList<Song>();
+                                    String an = norm(sel.artist != null ? sel.artist : "");
+                                    for (Carpeta cc : carpetas) {
+                                        if (cc.esLista || cc == carpetaBusqueda || cc.songs == null) continue;
+                                        for (Song x : cc.songs) if (x.artist != null && norm(x.artist).equals(an)) delArtista.add(x);
+                                    }
+                                    if (delArtista.isEmpty() || an.length() == 0) reproducirLista(cancionesDeLaCarpetaDe(sel), sel);
+                                    else reproducirLista(delArtista, sel);
+                                } else {
+                                    reproducirLista(new ArrayList<Song>(ls), sel);   // sigue en el orden de esa carpeta
+                                }
+                            }
+                        }
+                        return estadoJson();
+                    }
+                    return "{}";
+                }});
+            }
+        };
     }
     // Genera un código QR (sin internet) con la dirección para conectarse
     private Bitmap generarQR(String texto, int size) {
@@ -507,7 +737,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.filaCaratulas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secCaratulas, "Carátulas"); }});
         findViewById(R.id.filaApariencia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secApariencia, "Apariencia"); }});
         findViewById(R.id.filaReproduccion).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secReproduccion, "Reproducción"); }});
-        findViewById(R.id.filaWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secWifi, "Recibir por WiFi"); }});
+        findViewById(R.id.filaWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secWifi, "Celular por WiFi"); }});
         findViewById(R.id.btnDetectarUsb).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             detectarYEnfocarUsb();
         }});
@@ -616,6 +846,16 @@ public class MainActivity extends Activity {
         final CheckBox chkAutoplay = (CheckBox) findViewById(R.id.chkAutoplay);
         final CheckBox chkPausaUsb = (CheckBox) findViewById(R.id.chkPausaUsb);
         final CheckBox chkPantalla = (CheckBox) findViewById(R.id.chkPantalla);
+        final CheckBox chkWifiAuto = (CheckBox) findViewById(R.id.chkWifiAuto);
+        chkWifiAuto.setChecked(prefs.getBoolean("wifiAuto", true));
+        chkWifiAuto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){
+            prefs.edit().putBoolean("wifiAuto", c).apply();
+            if (c) iniciarServidorWifi();
+        }});
+        // ENCENDER SOLO: el control del celular arranca al abrir la app (sin entrar a Ajustes)
+        handler.postDelayed(new Runnable(){ public void run(){
+            try { if (prefs.getBoolean("wifiAuto", true)) iniciarServidorWifi(); } catch (Throwable e) {}
+        }}, 3000);
         final CheckBox chkVolArranque = (CheckBox) findViewById(R.id.chkVolArranque);
         final CheckBox chkAutoDetectar = (CheckBox) findViewById(R.id.chkAutoDetectar);
         chkResume.setChecked(optResume); chkAutoplay.setChecked(optAutoplay); chkPausaUsb.setChecked(optPausaUsb); chkPantalla.setChecked(optPantalla);
@@ -770,12 +1010,16 @@ public class MainActivity extends Activity {
                 try {
                     final ArrayList<Song> found = new ArrayList<Song>();
                     Set<String> vistos = new HashSet<String>();
-                    videos.clear(); vistosVideo.clear();
+                    final ArrayList<Song> vidsNuevos = new ArrayList<Song>();
+                    videosScan = vidsNuevos; vistosVideoScan = new java.util.HashSet<String>();
                     for (File root : raices()) {
                         buscarAudio(root, found, vistos, 0);
                     }
+                    for (Song s : found) { try { prepararBuscable(s); } catch (Throwable e) {} }   // buscador rapido desde el inicio
                     runOnUiThread(new Runnable() {
                         public void run() {
+                            videos.clear(); videos.addAll(vidsNuevos); vistosVideo.clear();
+                            for (Song v : vidsNuevos) vistosVideo.add(v.path);
                             agruparEnCarpetas(found);
                             modo = 0; carpetaAbierta = null;
                             adapter.notifyDataSetChanged();
@@ -908,21 +1152,29 @@ public class MainActivity extends Activity {
         if (t != null) t.setText("Buscando la memoria USB…");
         new Thread(new Runnable() {
             public void run() {
-                final String usb = detectarRutaUsb();
+                String usbTmp = null;
+                try { usbTmp = detectarRutaUsb(); } catch (Throwable e) {}
+                final String usb = usbTmp;
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        if (usb != null) {
-                            carpetaVinculada = usb;
-                            prefs.edit().putString("carpetaVinc", usb).apply();
-                            if (t != null) t.setText("Enfocado en el USB. Cargando…");
-                            escanearMusica();
-                            handler.postDelayed(new Runnable(){ public void run(){
-                                if (t != null) t.setText("USB: " + totalCanciones() + " canciones (solo memoria USB)");
-                                pintarAjustes();
-                            }}, 1200);
-                        } else {
-                            if (t != null) t.setText("No se encontró memoria USB con música. Revisa que esté conectada.");
-                            escanearMusica();
+                        try {
+                            if (usb != null) {
+                                carpetaVinculada = usb;
+                                try { prefs.edit().putString("carpetaVinc", usb).apply(); } catch (Exception e) {}
+                                if (t != null) t.setText("Enfocado en el USB. Cargando…");
+                                try { escanearMusica(); } catch (Throwable e) {}
+                                handler.postDelayed(new Runnable(){ public void run(){
+                                    try {
+                                        if (t != null) t.setText("USB: " + totalCanciones() + " canciones (solo memoria USB)");
+                                        pintarAjustes();
+                                    } catch (Throwable e) {}
+                                }}, 1200);
+                            } else {
+                                if (t != null) t.setText("No se encontró memoria USB con música. Revisa que esté conectada.");
+                                try { escanearMusica(); } catch (Throwable e) {}
+                            }
+                        } catch (Throwable e) {
+                            if (t != null) t.setText("No se pudo detectar. Intenta de nuevo.");
                         }
                     }
                 });
@@ -953,6 +1205,20 @@ public class MainActivity extends Activity {
         tecladoPreview = null;
         final float d = getResources().getDisplayMetrics().density;
         int hFila = (int)(48 * d);
+        // Barra con lo que se escribe ARRIBA del teclado (solo flotante: ahi el teclado tapa el campo)
+        if (esPopup) {
+            android.widget.TextView prev = new android.widget.TextView(this);
+            prev.setSingleLine(true); prev.setTextSize(20);
+            prev.setBackgroundColor(0xFF000000);
+            int pp=(int)(10*d); prev.setPadding(pp,pp,pp,pp);
+            String ini = (tecladoActivo!=null && tecladoActivo.getText()!=null)? tecladoActivo.getText().toString() : "";
+            if (ini.length()>0) { prev.setText(ini); prev.setTextColor(0xFFFFFFFF); }
+            else { prev.setText("Escribe aquí..."); prev.setTextColor(0xFF888899); }
+            android.widget.LinearLayout.LayoutParams plp = new android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            plp.setMargins(0,0,0,(int)(6*d)); prev.setLayoutParams(plp);
+            cont.addView(prev);
+            tecladoPreview = prev;
+        }
         // SOLO letras (o numeros/simbolos si tecladoNumeros). Numeros ocultos tras el boton 123.
         String[] filas;
         if (tecladoNumeros) filas = new String[]{ "1234567890", "-/:()$&@#", ".,?!+%_\"" };
@@ -1086,7 +1352,7 @@ public class MainActivity extends Activity {
         int pad = (int)(8 * getResources().getDisplayMetrics().density);
         cont.setPadding(pad, pad, pad, pad);
         armarTeclasEn(cont, true);
-        int alto = (int)(214 * getResources().getDisplayMetrics().density);
+        int alto = (int)(272 * getResources().getDisplayMetrics().density);
         tecladoPop = new android.widget.PopupWindow(cont, android.view.ViewGroup.LayoutParams.MATCH_PARENT, alto);
         tecladoPop.setFocusable(false);          // NO robar el foco al dialogo (el cursor sigue en el campo)
         tecladoPop.setOutsideTouchable(false);
@@ -1165,6 +1431,8 @@ public class MainActivity extends Activity {
         return r;
     }
 
+    private ArrayList<Song> videosScan = new ArrayList<Song>();
+    private java.util.HashSet<String> vistosVideoScan = new java.util.HashSet<String>();
     private void buscarAudio(File dir, ArrayList<Song> out, Set<String> vistos, int depth) {
         if (dir == null || depth > MAX_DEPTH || out.size() > 5000) return;
         File[] hijos;
@@ -1195,13 +1463,13 @@ public class MainActivity extends Activity {
                     } else if (low.endsWith(".mp4") || low.endsWith(".3gp") || low.endsWith(".m4v")
                         || low.endsWith(".mkv") || low.endsWith(".webm") || low.endsWith(".avi") || low.endsWith(".mov")) {
                         String path = f.getAbsolutePath();
-                        if (vistosVideo.contains(path)) continue;
-                        vistosVideo.add(path);
+                        if (vistosVideoScan.contains(path)) continue;
+                        vistosVideoScan.add(path);
                         Song v = new Song();
                         v.path = path;
                         v.title = limpiarNombre(f.getName());
                         try { v.fecha = f.lastModified(); } catch (Exception ex) { v.fecha = 0; }
-                        videos.add(v);
+                        videosScan.add(v);
                     }
                 }
             } catch (Exception e) {}
@@ -1264,6 +1532,7 @@ public class MainActivity extends Activity {
                         if (m[0] != null && m[0].trim().length() > 0) { s.title = m[0]; txtTitle.setText(m[0]); }
                         if (m[1] != null && m[1].trim().length() > 0) { s.artist = m[1]; txtArtist.setText(m[1]); }
                         if (m[2] != null && m[2].trim().length() > 0) s.album = m[2];
+                        s.buscable = null;
                         if (eqNombre != null) eqNombre.setInfo(s.artist != null && s.artist.length() > 0 ? s.artist : "", s.title);
                         portadaActualBmp = portada;
                         if (discoView != null) discoView.setCover(portada);   // portada al centro del disco (null = disco genérico)
@@ -1611,16 +1880,13 @@ public class MainActivity extends Activity {
     private void reproducirLista(ArrayList<Song> lista, Song sel) {
         if (lista == null || lista.isEmpty()) return;
         int i = indiceEnLista(lista, sel);
-        songs.clear(); songs.addAll(lista);
-        // al reproducir desde la carpeta, salir del modo busqueda para que "siguiente" siga esta lista
-        enBusqueda = false;
-        carpetaAbierta = null;
-        cancionesCarpeta = new ArrayList<Song>(lista);
+        songs.clear(); songs.addAll(lista);   // la lista que SUENA (la visible no se toca)
         boolean sh = shuffle; shuffle = false;   // seguir el ORDEN de la carpeta (no aleatorio)
         construirOrden();
         shuffle = sh;
         reproducirCancion(i);
         mostrarLista(false);
+        try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
     }
     // Menu al tocar una cancion desde la BUSQUEDA: 2 opciones (esta carpeta / todo el artista)
     private void menuReproBusqueda(int idx) {
@@ -1684,6 +1950,8 @@ public class MainActivity extends Activity {
         if (idx < 0 || idx >= cancionesCarpeta.size()) return;
         songs.clear();
         songs.addAll(cancionesCarpeta);
+        // al tocar una cancion de la carpeta: seguir con la PROXIMA en el orden de la carpeta (no aleatorio)
+        if (shuffle) { shuffle = false; prefs.edit().putBoolean("shuffle", false).apply(); try { pintarShuffle(); } catch (Exception e) {} }
         construirOrden();
         reproducirCancion(idx);
         mostrarLista(false);
@@ -1701,6 +1969,13 @@ public class MainActivity extends Activity {
         cargarYReproducir();
     }
 
+    private int erroresSeguidos = 0;
+    // Si una cancion falla, pasar a la proxima (si fallan todas seguidas, parar para no quedarse en bucle)
+    private void saltarPorError() {
+        erroresSeguidos++;
+        if (erroresSeguidos >= Math.max(1, songs.size())) { erroresSeguidos = 0; try { pintarPlay(false); } catch (Exception e) {} return; }
+        handler.postDelayed(new Runnable(){ public void run(){ try { siguiente(false); } catch (Exception e) {} } }, 400);
+    }
     private void cargarYReproducir() {
         if (posEnOrden < 0 || posEnOrden >= order.size()) return;
         final Song s = songs.get(order.get(posEnOrden));
@@ -1725,11 +2000,15 @@ public class MainActivity extends Activity {
                 }
             });
             mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                public void onCompletion(MediaPlayer m) { siguiente(true); }
+                public void onCompletion(MediaPlayer m) { erroresSeguidos = 0; siguiente(true); }
+            });
+            mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                public boolean onError(MediaPlayer m, int what, int extra) { saltarPorError(); return true; }
             });
             mp.prepareAsync();
         } catch (Exception e) {
-            Toast.makeText(this, "No se pudo reproducir: " + s.title, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No se pudo reproducir: " + s.title + " (pasando a la próxima)", Toast.LENGTH_SHORT).show();
+            saltarPorError();
             return;
         }
         txtTitle.setText(s.title);
@@ -1755,7 +2034,7 @@ public class MainActivity extends Activity {
         if (order.isEmpty()) return;
         if (repeat == 2 && auto) { if (mp != null) { mp.seekTo(0); mp.start(); } return; }
         if (posEnOrden < order.size() - 1) posEnOrden++;
-        else { if (repeat == 1 || !auto) posEnOrden = 0; else { pintarPlay(false); return; } }
+        else posEnOrden = 0;   // termino la carpeta: vuelve a la primera y sigue sonando
         animDir = 1;
         cargarYReproducir();
     }
@@ -1993,6 +2272,7 @@ public class MainActivity extends Activity {
         try { ((Button) findViewById(R.id.btnCerrarAjustes)).setText("‹ Menú"); } catch (Exception e) {}
     }
     private void pintarAjustes() {
+        pintarEstadoWifi();
         TextView tv = (TextView) findViewById(R.id.txtCarpetaVinc);
         Button bd = (Button) findViewById(R.id.btnDesvincular);
         if (carpetaVinculada != null) { tv.setText("Carpeta: " + carpetaVinculada); bd.setVisibility(View.VISIBLE); }
@@ -3178,8 +3458,17 @@ public class MainActivity extends Activity {
         }
     }
     // Busca canciones por nombre/artista/álbum/archivo en TODAS las carpetas (por palabras, sin acentos)
+    private volatile int busquedaSeq = 0;
+    // Prepara el texto buscable de una cancion (sin tildes, minusculas)
+    private void prepararBuscable(Song s) {
+        if (s.buscable != null) return;
+        String b = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
+        s.buscableJunto = b.replace(" ", "");
+        s.buscable = b;
+    }
     private void filtrarBusqueda(String qraw) {
-        String q = limpiarTexto(qraw);
+        final String q = limpiarTexto(qraw);
+        final int seq = ++busquedaSeq;   // cualquier busqueda vieja que siga corriendo se descarta
         if (q.length() == 0) {
             enBusqueda = false;
             if (modo == 1 && carpetaAbierta == carpetaBusqueda) { modo = 0; carpetaAbierta = null; }
@@ -3187,32 +3476,42 @@ public class MainActivity extends Activity {
             actualizarHeaderLista();
             return;
         }
-        enBusqueda = true;
-        String[] palabras = q.split(" ");
-        String qJunto = q.replace(" ", "");
-        ArrayList<Song> res = new ArrayList<Song>();
-        for (Carpeta c : carpetas) {
-            if (c.esLista) continue;
-            for (Song s : c.songs) {
-                if (s.buscable == null) {   // precalcular una sola vez (RAPIDO en las siguientes teclas)
-                    s.buscable = limpiarTexto((s.title != null ? s.title : "") + " " + (s.artist != null ? s.artist : "") + " " + (s.album != null ? s.album : "") + " " + nombreDe(s));
-                    s.buscableJunto = s.buscable.replace(" ", "");
+        // copia rapida de las canciones (en la pantalla); la busqueda pesada va en segundo plano
+        final ArrayList<Song> todas = new ArrayList<Song>();
+        for (Carpeta c : carpetas) { if (!c.esLista && c != carpetaBusqueda && c.songs != null) todas.addAll(c.songs); }
+        try { txtCount.setText("Buscando..."); } catch (Exception e) {}
+        new Thread(new Runnable() { public void run() {
+            try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); } catch (Exception e) {}
+            final ArrayList<Song> res = new ArrayList<Song>();
+            try {
+                String[] palabras = q.split(" ");
+                String qJunto = q.replace(" ", "");
+                for (int i = 0; i < todas.size(); i++) {
+                    if ((i & 127) == 0 && seq != busquedaSeq) return;   // ya escribieron otra cosa
+                    Song s = todas.get(i);
+                    prepararBuscable(s);
+                    String texto = s.buscable;
+                    boolean ok = true;
+                    for (int k = 0; k < palabras.length; k++) { if (palabras[k].length() > 0 && texto.indexOf(palabras[k]) < 0) { ok = false; break; } }
+                    if (!ok && qJunto.length() >= 2 && s.buscableJunto.indexOf(qJunto) >= 0) ok = true;   // busqueda "pegada" desde 2 letras
+                    if (ok) res.add(s);
                 }
-                String texto = s.buscable;
-                boolean todas = true;
-                for (int k = 0; k < palabras.length; k++) { if (palabras[k].length() > 0 && texto.indexOf(palabras[k]) < 0) { todas = false; break; } }
-                if (!todas && qJunto.length() >= 2 && s.buscableJunto.indexOf(qJunto) >= 0) todas = true;   // busqueda "pegada" desde 2 letras
-                if (todas) res.add(s);
-            }
-        }
-        if (carpetaBusqueda == null) { carpetaBusqueda = new Carpeta(); carpetaBusqueda.name = "Búsqueda"; carpetaBusqueda.esLista = false; }
-        carpetaBusqueda.songs = res;
-        cancionesCarpeta = res;
-        carpetaAbierta = carpetaBusqueda;
-        modo = 1;
-        adapter.notifyDataSetChanged();
-        try { list.setSelection(0); } catch (Exception e) {}
-        try { txtCount.setText("Resultados: " + res.size()); } catch (Exception e) {}
+            } catch (Throwable e) {}
+            runOnUiThread(new Runnable() { public void run() {
+                if (seq != busquedaSeq) return;
+                try {
+                    enBusqueda = true;
+                    if (carpetaBusqueda == null) { carpetaBusqueda = new Carpeta(); carpetaBusqueda.name = "Búsqueda"; carpetaBusqueda.esLista = false; }
+                    carpetaBusqueda.songs = res;
+                    cancionesCarpeta = res;
+                    carpetaAbierta = carpetaBusqueda;
+                    modo = 1;
+                    adapter.notifyDataSetChanged();
+                    try { list.setSelection(0); } catch (Exception e) {}
+                    try { txtCount.setText("Resultados: " + res.size()); } catch (Exception e) {}
+                } catch (Throwable e) {}
+            }});
+        }}).start();
     }
 
     // Trae VARIAS URLs de carátula (iTunes + Deezer) para poder elegir otra distinta
@@ -3337,7 +3636,9 @@ public class MainActivity extends Activity {
                     guardarNombre(s, etTit.getText().toString().trim(), etArt.getText().toString().trim());
                 }
             })
-            .setNegativeButton("Cancelar", null).show();
+            .setNegativeButton("Cancelar", null).create();
+        try { dlgCar.getWindow().setGravity(android.view.Gravity.TOP); } catch (Exception e) {}   // arriba, el teclado va abajo (no se tapan)
+        dlgCar.show();
         btnSug.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { try { dlgCar.dismiss(); } catch (Exception e) {} sugerirNombre(s); }
         });
@@ -3479,7 +3780,7 @@ public class MainActivity extends Activity {
                     final String nombreNuevo = (art.length() > 0 ? art + " - " + tit : tit);
                     final int hechosAhora = hechos + 1;
                     runOnUiThread(new Runnable(){ public void run(){ pd.setProgress(idx); pd.setMessage("Cambiando " + hechosAhora + "/" + total + ":\n" + nombreNuevo); }});
-                    s.title = tit; if (art.length() > 0) s.artist = art;
+                    s.title = tit; if (art.length() > 0) s.artist = art; s.buscable = null;
                     String nombreArch = nombreNuevo;
                     renombrarEnUsb(s, nombreArch);
                     byte[] img = (url != null && url.length() > 0) ? bajarUrl(url) : null;
@@ -3710,7 +4011,7 @@ public class MainActivity extends Activity {
                     .setItems(new String[]{ "Solo corregir el nombre", "Nombre + carátula" }, new android.content.DialogInterface.OnClickListener() {
                         public void onClick(android.content.DialogInterface dd, int w) {
                             final boolean conCaratula = (w == 1);
-                            s.title = tit; if (art.length() > 0) s.artist = art;
+                            s.title = tit; if (art.length() > 0) s.artist = art; s.buscable = null;
                             txtTitle.setText(s.title);
                             txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido");
                             if (eqNombre != null) eqNombre.setInfo(s.artist, s.title);
@@ -3741,6 +4042,7 @@ public class MainActivity extends Activity {
     private void aplicarNombre(Song s, String tit, String art) {
         if (tit != null && tit.length() > 0) s.title = tit;
         if (art != null && art.length() > 0) s.artist = art;
+        s.buscable = null;
     }
     private void guardarNombre(final Song s, final String tit, final String art) {
         Toast.makeText(this, "Guardando…", Toast.LENGTH_SHORT).show();
