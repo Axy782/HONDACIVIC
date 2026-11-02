@@ -323,7 +323,9 @@ public class MainActivity extends Activity {
             o.put("vol", am.getStreamVolume(AudioManager.STREAM_MUSIC));
             o.put("volMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
         } catch (Exception e) {}
-        o.put("aleatorio", shuffle);
+        o.put("aleatorio", modoAleat);          // 0 en orden, 1 carpeta, 2 todo el USB
+        o.put("repetir", repeat == 1);
+        o.put("volApp", Math.round(volApp * 100));
         return o.toString();
     }
     private org.json.JSONObject itemCancion(int c, int i, Song s) throws Exception {
@@ -361,6 +363,21 @@ public class MainActivity extends Activity {
             }
         } catch (Throwable e) {}
         return arr.toString();
+    }
+    // Despues de cambiar listas desde el celular: refrescar lo que se ve en el radio (sin cerrar la app)
+    private void refrescarListasRadio(String n) {
+        try {
+            construirNombresListas();
+            calcularPortadasListas();
+            if (modo == 1 && carpetaAbierta != null && carpetaAbierta.esLista && n != null && n.equals(carpetaAbierta.name)) {
+                ArrayList<Song> arr = new ArrayList<Song>();
+                org.json.JSONArray a = listas.optJSONArray(n);
+                if (a != null) for (int k = 0; k < a.length(); k++) { Song s = songPorRuta(a.optString(k)); if (s != null) arr.add(s); }
+                carpetaAbierta.songs = arr; cancionesCarpeta = arr;
+            }
+            adapter.notifyDataSetChanged();
+            actualizarHeaderLista();
+        } catch (Exception e) {}
     }
     private ServidorWifi.Control crearControlRemoto() {
         return new ServidorWifi.Control() {
@@ -403,13 +420,84 @@ public class MainActivity extends Activity {
                         if (a.equals("toggle")) toggle();
                         else if (a.equals("next")) siguiente(false);
                         else if (a.equals("prev")) anterior();
-                        else if (a.equals("volup")) am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0);
-                        else if (a.equals("voldown")) am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0);
-                        else if (a.equals("aleatorio")) { try { btnShuffle.performClick(); } catch (Exception e) {} }
+                        else if (a.equals("volup")) cambiarVolumen(true);
+                        else if (a.equals("voldown")) cambiarVolumen(false);
+                        else if (a.equals("aleatorio")) ciclarAleatorio();
+                        else if (a.equals("modo")) ponerModoAleatorio(Math.max(0, Math.min(2, entero(p.get("m"), 0))));
+                        else if (a.equals("repetir")) { repeat = (repeat == 1) ? 0 : 1; pintarRepeat(); }
                         else if (a.equals("seek")) {
                             int ms = entero(p.get("ms"), -1);
                             try { if (mp != null && prepared && ms >= 0) { mp.seekTo(Math.min(ms, mp.getDuration())); seek.setProgress(mp.getCurrentPosition()); } } catch (Exception e) {}
                         }
+                        return estadoJson();
+                    }
+                    if (ruta.startsWith("/api/listas")) {
+                        construirNombresListas();
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        for (String n : nombresListas) {
+                            org.json.JSONArray l = listas.optJSONArray(n);
+                            org.json.JSONObject o = new org.json.JSONObject();
+                            o.put("n", n); o.put("total", l != null ? l.length() : 0);
+                            arr.put(o);
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/lista_ver")) {
+                        String n = p.get("n");
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        org.json.JSONArray l = (n != null) ? listas.optJSONArray(n) : null;
+                        if (l != null) for (int k = 0; k < l.length(); k++) {
+                            Song s = songPorRuta(l.optString(k));
+                            org.json.JSONObject o = new org.json.JSONObject();
+                            o.put("i", k);
+                            if (s != null) { o.put("t", s.title != null && s.title.length() > 0 ? s.title : nombreDe(s)); o.put("a", s.artist != null && !s.artist.equals("Desconocido") ? s.artist : ""); }
+                            else { String pth = l.optString(k); o.put("t", pth.substring(pth.lastIndexOf('/') + 1)); o.put("a", "(no está en el USB)"); }
+                            arr.put(o);
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/lista_crear")) {
+                        String n = p.get("n") != null ? p.get("n").trim() : "";
+                        if (n.length() == 0) return "{\"ok\":false,\"msg\":\"Escribe un nombre\"}";
+                        if (listas.has(n)) return "{\"ok\":false,\"msg\":\"Ya existe una lista con ese nombre\"}";
+                        listas.put(n, new org.json.JSONArray()); guardarListas(); refrescarListasRadio(n);
+                        return "{\"ok\":true}";
+                    }
+                    if (ruta.startsWith("/api/lista_agregar")) {
+                        String n = p.get("n"); if (n == null || n.trim().length() == 0) return "{\"ok\":false}";
+                        Song s = null;
+                        if ("1".equals(p.get("actual"))) s = cancionActual();
+                        else {
+                            int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1);
+                            if (c >= 0 && c < carpetas.size() && i >= 0 && i < carpetas.get(c).songs.size()) s = carpetas.get(c).songs.get(i);
+                        }
+                        if (s == null || s.path == null) return "{\"ok\":false,\"msg\":\"No hay canción\"}";
+                        org.json.JSONArray l = listas.optJSONArray(n);
+                        if (l == null) { l = new org.json.JSONArray(); listas.put(n, l); }
+                        if (indiceEnArray(l, s.path) >= 0) return "{\"ok\":true,\"msg\":\"Ya estaba\"}";
+                        l.put(s.path); guardarListas(); refrescarListasRadio(n); try { pintarFav(); } catch (Exception e) {}
+                        return "{\"ok\":true,\"msg\":\"Agregada\"}";
+                    }
+                    if (ruta.startsWith("/api/lista_quitar")) {
+                        String n = p.get("n"); int i = entero(p.get("i"), -1);
+                        org.json.JSONArray l = (n != null) ? listas.optJSONArray(n) : null;
+                        if (l != null && i >= 0 && i < l.length()) { listas.put(n, sinIndice(l, i)); guardarListas(); refrescarListasRadio(n); try { pintarFav(); } catch (Exception e) {} }
+                        return "{\"ok\":true}";
+                    }
+                    if (ruta.startsWith("/api/lista_borrar")) {
+                        String n = p.get("n");
+                        if (n == null) return "{\"ok\":false}";
+                        if (n.equals("Favoritas")) listas.put(n, new org.json.JSONArray());   // Favoritas no se borra: se vacia
+                        else listas.remove(n);
+                        guardarListas(); refrescarListasRadio(n); try { pintarFav(); } catch (Exception e) {}
+                        return "{\"ok\":true}";
+                    }
+                    if (ruta.startsWith("/api/lista_tocar")) {
+                        String n = p.get("n"); int i = entero(p.get("i"), 0);
+                        org.json.JSONArray l = (n != null) ? listas.optJSONArray(n) : null;
+                        ArrayList<Song> arr = new ArrayList<Song>(); Song sel = null;
+                        if (l != null) for (int k = 0; k < l.length(); k++) { Song s = songPorRuta(l.optString(k)); if (s != null) { arr.add(s); if (k == i) sel = s; } }
+                        if (!arr.isEmpty()) reproducirLista(arr, sel != null ? sel : arr.get(0));
                         return estadoJson();
                     }
                     if (ruta.startsWith("/api/carpetas")) {
@@ -888,8 +976,8 @@ public class MainActivity extends Activity {
         registrarUsbReceiver();
         registrarNetReceiver();
 
-        shuffle = prefs.getBoolean("shuffle", false);
-        repeat = prefs.getInt("repeat", 0);
+        shuffle = false;   // al abrir: siempre pista siguiente EN ORDEN
+        repeat = 0;        // al abrir: siempre sigue con la proxima de la carpeta
         eqEnabled = prefs.getBoolean("eqOn", true);
         pintarShuffle(); pintarRepeat();
 
@@ -941,15 +1029,9 @@ public class MainActivity extends Activity {
         btnPlay.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ toggle(); }});
         btnNext.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ siguiente(false); }});
         btnPrev.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ anterior(); }});
-        btnShuffle.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            shuffle = !shuffle; prefs.edit().putBoolean("shuffle", shuffle).apply();
-            int actual = (posEnOrden>=0 && posEnOrden<order.size()) ? order.get(posEnOrden) : -1;
-            construirOrden();
-            if(actual>=0) posEnOrden = order.indexOf(actual);
-            pintarShuffle();
-        }});
+        btnShuffle.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ ciclarAleatorio(); }});
         btnRepeat.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
-            repeat = (repeat+1)%3; prefs.edit().putInt("repeat", repeat).apply(); pintarRepeat();
+            repeat = (repeat == 1) ? 0 : 1; pintarRepeat();
         }});
         btnEq.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarEq(); }});
 
@@ -1817,8 +1899,7 @@ public class MainActivity extends Activity {
         if (cancionesCarpeta.isEmpty()) return;
         songs.clear();
         songs.addAll(cancionesCarpeta);
-        shuffle = aleatorio;
-        prefs.edit().putBoolean("shuffle", shuffle).apply();
+        shuffle = aleatorio; modoAleat = aleatorio ? 1 : 0;
         pintarShuffle();
         construirOrden();
         posEnOrden = 0;
@@ -1881,9 +1962,9 @@ public class MainActivity extends Activity {
         if (lista == null || lista.isEmpty()) return;
         int i = indiceEnLista(lista, sel);
         songs.clear(); songs.addAll(lista);   // la lista que SUENA (la visible no se toca)
-        boolean sh = shuffle; shuffle = false;   // seguir el ORDEN de la carpeta (no aleatorio)
+        shuffle = false; modoAleat = 0;   // escoger una cancion: siguiente pista EN ORDEN
+        try { pintarShuffle(); } catch (Exception e) {}
         construirOrden();
-        shuffle = sh;
         reproducirCancion(i);
         mostrarLista(false);
         try { adapter.notifyDataSetChanged(); } catch (Exception e) {}
@@ -1951,7 +2032,7 @@ public class MainActivity extends Activity {
         songs.clear();
         songs.addAll(cancionesCarpeta);
         // al tocar una cancion de la carpeta: seguir con la PROXIMA en el orden de la carpeta (no aleatorio)
-        if (shuffle) { shuffle = false; prefs.edit().putBoolean("shuffle", false).apply(); try { pintarShuffle(); } catch (Exception e) {} }
+        shuffle = false; modoAleat = 0; try { pintarShuffle(); } catch (Exception e) {}
         construirOrden();
         reproducirCancion(idx);
         mostrarLista(false);
@@ -1976,6 +2057,20 @@ public class MainActivity extends Activity {
         if (erroresSeguidos >= Math.max(1, songs.size())) { erroresSeguidos = 0; try { pintarPlay(false); } catch (Exception e) {} return; }
         handler.postDelayed(new Runnable(){ public void run(){ try { siguiente(false); } catch (Exception e) {} } }, 400);
     }
+    private float volApp = 1f;   // volumen del reproductor 0..1 (funciona siempre)
+    private void aplicarVolApp() { try { if (mp != null) mp.setVolume(volApp, volApp); } catch (Exception e) {} }
+    private void cambiarVolumen(boolean subir) {
+        int antes = -1, despues = -1;
+        try { antes = am.getStreamVolume(AudioManager.STREAM_MUSIC); } catch (Exception e) {}
+        if (subir) {
+            if (volApp < 0.999f) volApp = Math.min(1f, volApp + 0.1f);   // primero recupera el del reproductor
+            else { try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0); } catch (Exception e) {} }
+        } else {
+            try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0); despues = am.getStreamVolume(AudioManager.STREAM_MUSIC); } catch (Exception e) {}
+            if (despues == antes || despues < 0) volApp = Math.max(0f, volApp - 0.1f);   // el radio no dejo bajar: baja el del reproductor
+        }
+        aplicarVolApp();
+    }
     private void cargarYReproducir() {
         if (posEnOrden < 0 || posEnOrden >= order.size()) return;
         final Song s = songs.get(order.get(posEnOrden));
@@ -1990,6 +2085,7 @@ public class MainActivity extends Activity {
             mp.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 public void onPrepared(MediaPlayer m) {
                     prepared = true;
+                    aplicarVolApp();
                     seek.setMax(m.getDuration());
                     txtDur.setText(fmt(m.getDuration()));
                     configurarEq();
@@ -2032,7 +2128,7 @@ public class MainActivity extends Activity {
 
     private void siguiente(boolean auto) {
         if (order.isEmpty()) return;
-        if (repeat == 2 && auto) { if (mp != null) { mp.seekTo(0); mp.start(); } return; }
+        if (repeat == 1 && auto) { if (mp != null) { mp.seekTo(0); mp.start(); } return; }   // Repite la misma
         if (posEnOrden < order.size() - 1) posEnOrden++;
         else posEnOrden = 0;   // termino la carpeta: vuelve a la primera y sigue sonando
         animDir = 1;
@@ -4388,12 +4484,43 @@ public class MainActivity extends Activity {
         if (playing) tomarWake(); else liberarWake();
         aplicarEfectos();
     }
+    // 0 = En orden (siguiente de la carpeta) | 1 = Aleatorio de la carpeta | 2 = Aleatorio de todo el USB
+    private int modoAleat = 0;
     private void pintarShuffle() {
-        btnShuffle.setTextColor(shuffle ? accent : 0xFF8B8B9A);
+        btnShuffle.setText(modoAleat == 2 ? "Aleat. todo USB" : modoAleat == 1 ? "Aleat. carpeta" : "En orden");
+        btnShuffle.setTextColor(modoAleat > 0 ? accent : 0xFFF4F4F8);
     }
+    // Pone el modo pedido sin cortar la cancion que esta sonando
+    private void ponerModoAleatorio(int modo) {
+        Song actual = cancionActual();
+        if (modo == 2) {
+            ArrayList<Song> todo = new ArrayList<Song>();
+            java.util.HashSet<String> vistos = new java.util.HashSet<String>();
+            for (Carpeta c : carpetas) {
+                if (c.esLista || c == carpetaBusqueda || c.songs == null) continue;
+                for (Song s : c.songs) if (s.path != null && vistos.add(s.path)) todo.add(s);
+            }
+            if (!todo.isEmpty()) { songs.clear(); songs.addAll(todo); }
+        } else if (modoAleat == 2 && actual != null) {
+            // saliendo de "todo el USB": volver a la carpeta de la cancion que suena
+            ArrayList<Song> carp = cancionesDeLaCarpetaDe(actual);
+            songs.clear(); songs.addAll(carp);
+        }
+        modoAleat = modo;
+        shuffle = modo > 0;
+        construirOrden();
+        if (actual != null && !songs.isEmpty()) {
+            int ix = indiceEnLista(songs, actual);
+            int p = order.indexOf(ix);
+            if (p >= 0 && shuffle) { order.remove(p); order.add(0, ix); posEnOrden = 0; }   // la que suena queda primera, no se repite
+            else posEnOrden = (p >= 0) ? p : 0;
+        }
+        pintarShuffle();
+    }
+    private void ciclarAleatorio() { ponerModoAleatorio((modoAleat + 1) % 3); }
     private void pintarRepeat() {
-        btnRepeat.setText(repeat == 0 ? "Repetir" : repeat == 1 ? "Repetir: Todo" : "Repetir: Una");
-        btnRepeat.setTextColor(repeat == 0 ? 0xFF8B8B9A : accent);
+        btnRepeat.setText(repeat == 1 ? "Repite 1" : "Sigue");
+        btnRepeat.setTextColor(repeat == 1 ? accent : 0xFFF4F4F8);
     }
 
     private String fmt(int ms) {

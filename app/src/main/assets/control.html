@@ -8,6 +8,7 @@
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:#0d0d12;color:#f4f4f8;font-family:Arial,Helvetica,sans-serif;padding-bottom:30px}
+button{font-family:inherit;cursor:pointer}
 .wrap{max-width:560px;margin:0 auto;padding:16px}
 .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .top h1{font-size:18px;margin:0}
@@ -25,32 +26,42 @@ body{margin:0;background:#0d0d12;color:#f4f4f8;font-family:Arial,Helvetica,sans-
 .barra::-moz-range-progress{height:6px;border-radius:3px;background:#FFB020}
 .barra::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#FFB020;margin-top:-6px;border:none}
 .barra::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#FFB020;border:none}
-.tiempos{display:flex;justify-content:space-between;font-size:11px;color:#8b8b9a;margin-top:4px}
-.ctrl{display:flex;justify-content:center;align-items:center;gap:22px;margin:16px 0 10px}
+.tiempos{display:flex;justify-content:space-between;font-size:11px;color:#8b8b9a;margin-top:2px}
+.ctrl{display:flex;justify-content:center;align-items:center;gap:22px;margin:16px 0 12px}
 .ctrl button{border:none;border-radius:50%;background:#262633;color:#f4f4f8;width:64px;height:64px;font-size:24px}
 .ctrl .play{width:84px;height:84px;background:#FFB020;color:#1a1a1a;font-size:32px}
-.fila2{display:flex;gap:10px;margin-bottom:16px}
-.fila2 button{flex:1;border:none;border-radius:12px;background:#1c1c26;color:#f4f4f8;padding:13px 0;font-size:15px;font-weight:bold}
-.fila2 button.on{color:#FFB020}
-.vol{font-size:13px;color:#8b8b9a;text-align:center;margin:-6px 0 14px}
-.tabs{display:flex;gap:8px;margin-bottom:10px}
+.fila{display:flex;gap:8px;margin-bottom:8px}
+.fila button{flex:1;border:none;border-radius:12px;background:#1c1c26;color:#f4f4f8;padding:13px 4px;font-size:14px;font-weight:bold}
+.fila button.on{background:#2e2614;color:#FFB020;box-shadow:inset 0 0 0 1px #FFB02066}
+.etq{font-size:12px;color:#8b8b9a;margin:10px 2px 6px}
+.vol{font-size:13px;color:#8b8b9a;text-align:center;margin:2px 0 14px}
+.tabs{display:flex;gap:8px;margin:16px 0 10px}
 .tabs button{flex:1;border:none;border-radius:12px;padding:12px 0;font-size:15px;font-weight:bold;background:#1c1c26;color:#9a9aa8}
 .tabs button.on{background:#262633;color:#FFB020}
 .buscar{display:flex;gap:8px;margin-bottom:10px}
 .buscar input{flex:1;border:1px solid #2c2c3a;background:#1c1c26;color:#f4f4f8;border-radius:12px;padding:0 14px;height:48px;font-size:16px;outline:none}
 .lista{background:#1c1c26;border-radius:16px;overflow:hidden}
-.item{padding:13px 14px;border-bottom:1px solid #26263200;border-top:1px solid #262632;display:flex;align-items:center;gap:10px}
+.item{padding:12px 14px;border-top:1px solid #262632;display:flex;align-items:center;gap:8px}
 .item:first-child{border-top:none}
 .item:active{background:#262633}
 .item .t{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .a{font-size:12px;color:#8b8b9a;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .tx{flex:1;min-width:0}
 .item .n{color:#8b8b9a;font-size:13px}
-.item .mas{border:none;background:#262633;color:#FFB020;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:bold;flex:none}
+.mini{border:none;background:#262633;color:#FFB020;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:bold;flex:none}
+.mini.rojo{color:#ff7b7b}
 .volver{color:#FFB020;font-weight:bold}
 .vacio{padding:18px;text-align:center;color:#8b8b9a;font-size:14px}
-.aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#262633;color:#f4f4f8;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none}
+.nueva{width:100%;border:none;border-radius:12px;background:#FFB020;color:#1a1a1a;font-weight:bold;font-size:15px;padding:13px;margin-bottom:10px}
+.aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#262633;color:#f4f4f8;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9}
 .aviso.ver{opacity:1}
+.velo{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;justify-content:center;z-index:8}
+.velo.ver{display:flex}
+.hoja{background:#1c1c26;border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:75vh;overflow:auto;padding:16px}
+.hoja h3{margin:0 0 4px;font-size:16px}
+.hoja p{margin:0 0 12px;color:#8b8b9a;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hoja .item{background:#262633;border-radius:12px;margin-bottom:8px;border:none}
+.hoja .cerrar{width:100%;border:none;border-radius:12px;background:#262633;color:#f4f4f8;padding:13px;font-size:15px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -73,37 +84,60 @@ body{margin:0;background:#0d0d12;color:#f4f4f8;font-family:Arial,Helvetica,sans-
     <button class="play" id="bplay" onclick="cmd('toggle')" aria-label="Play o pausa">&#9654;</button>
     <button onclick="cmd('next')" aria-label="Siguiente">&#9197;</button>
   </div>
-  <div class="fila2">
+
+  <div class="fila">
     <button onclick="cmd('voldown')">Vol &minus;</button>
-    <button id="baleat" onclick="cmd('aleatorio')">Aleatorio</button>
     <button onclick="cmd('volup')">Vol +</button>
+    <button onclick="agregarActual()">+ Lista</button>
   </div>
   <div class="vol" id="vol"></div>
+
+  <div class="etq">Al terminar la canción</div>
+  <div class="fila">
+    <button id="m0" onclick="cmd('modo&m=0')">En orden</button>
+    <button id="m1" onclick="cmd('modo&m=1')">Aleat. carpeta</button>
+    <button id="m2" onclick="cmd('modo&m=2')">Aleat. todo USB</button>
+  </div>
+  <div class="fila">
+    <button id="brep" onclick="cmd('repetir')">Repetir esta canción: No</button>
+  </div>
 
   <div class="tabs">
     <button id="tabC" class="on" onclick="verTab('c')">Carpetas</button>
     <button id="tabB" onclick="verTab('b')">Buscar</button>
+    <button id="tabL" onclick="verTab('l')">Listas</button>
   </div>
   <div class="buscar" id="cajaB" style="display:none">
     <input id="q" type="search" placeholder="Artista o canción..." autocomplete="off">
   </div>
+  <div id="cajaL" style="display:none"><button class="nueva" onclick="nuevaLista()">+ Nueva lista</button></div>
   <div class="lista" id="lista"><div class="vacio">Cargando...</div></div>
+</div>
+
+<div class="velo" id="velo" onclick="if(event.target===this)cerrarHoja()">
+  <div class="hoja">
+    <h3>Agregar a una lista</h3>
+    <p id="hojaTit"></p>
+    <div id="hojaListas"></div>
+    <button class="cerrar" onclick="cerrarHoja()">Cancelar</button>
+  </div>
 </div>
 <div class="aviso" id="aviso"></div>
 
 <script>
-var ultimoId = null, tab = 'c', carpetaAbierta = null, tBusq = null, durActual = 0, arrastrando = false;
+var ultimoId = null, tab = 'c', tBusq = null, durActual = 0, arrastrando = false, paraAgregar = null, listaAbierta = null;
 function $(id){ return document.getElementById(id); }
 function fmt(ms){ ms = Math.max(0, Math.floor(ms/1000)); var m = Math.floor(ms/60), s = ms%60; return m + ':' + (s<10?'0':'') + s; }
-function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-function aviso(t){ var a = $('aviso'); a.textContent = t; a.className = 'aviso ver'; clearTimeout(aviso.t); aviso.t = setTimeout(function(){ a.className = 'aviso'; }, 1600); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function aviso(t){ var a = $('aviso'); a.textContent = t; a.className = 'aviso ver'; clearTimeout(aviso.t); aviso.t = setTimeout(function(){ a.className = 'aviso'; }, 1800); }
 function pedir(url, cb){
-  var x = new XMLHttpRequest(); x.open('GET', url + (url.indexOf('?')<0?'?':'&') + '_=' + Date.now()); x.timeout = 6000;
+  var x = new XMLHttpRequest(); x.open('GET', url + (url.indexOf('?')<0?'?':'&') + '_=' + Date.now()); x.timeout = 8000;
   x.onload = function(){ var d = null; try { d = JSON.parse(x.responseText); } catch(e){} conectado(true); if (cb) cb(d); };
   x.onerror = x.ontimeout = function(){ conectado(false); if (cb) cb(null); };
   x.send();
 }
 function conectado(ok){ var e = $('estado'); e.textContent = ok ? 'Conectado al radio' : 'Sin conexión con el radio (revisa el WiFi)'; e.className = ok ? 'estado' : 'estado off'; }
+function ponerBarra(v){ var b = $('prog'); b.value = v; b.style.setProperty('--p', (v/10) + '%'); }
 function pintar(d){
   if (!d || d.error) return;
   $('tit').textContent = d.titulo || 'Nada sonando';
@@ -112,62 +146,137 @@ function pintar(d){
   durActual = d.dur || 0;
   if (!arrastrando) { ponerBarra(d.dur > 0 ? Math.min(1000, Math.round(d.pos*1000/d.dur)) : 0); $('tpos').textContent = fmt(d.pos); }
   $('tdur').textContent = fmt(d.dur);
-  $('baleat').className = d.aleatorio ? 'on' : '';
-  if (d.volMax) $('vol').textContent = 'Volumen ' + d.vol + ' / ' + d.volMax;
+  for (var i = 0; i < 3; i++) $('m' + i).className = (d.aleatorio === i) ? 'on' : '';
+  $('brep').className = d.repetir ? 'on' : '';
+  $('brep').textContent = 'Repetir esta canción: ' + (d.repetir ? 'Sí' : 'No');
+  var v = 'Volumen del reproductor ' + (d.volApp != null ? d.volApp : 100) + '%';
+  if (d.volMax) v += ' · Radio ' + d.vol + '/' + d.volMax;
+  $('vol').textContent = v;
   if (d.id !== ultimoId) { ultimoId = d.id; $('cov').style.backgroundImage = d.id ? 'url(/caratula?v=' + d.id + ')' : 'none'; }
 }
 function estado(){ pedir('/api/estado', pintar); }
-function ponerBarra(v){ var b = $('prog'); b.value = v; b.style.setProperty('--p', (v/10) + '%'); }
+function cmd(a){ pedir('/api/cmd?a=' + a, pintar); }
 $('prog').addEventListener('input', function(){ arrastrando = true; ponerBarra(this.value); $('tpos').textContent = fmt(durActual * this.value / 1000); });
 $('prog').addEventListener('change', function(){
   var ms = Math.round(durActual * this.value / 1000);
   pedir('/api/cmd?a=seek&ms=' + ms, function(d){ arrastrando = false; pintar(d); });
 });
-function cmd(a){ pedir('/api/cmd?a=' + a, pintar); }
+
 function tocar(c, s, artista){
   pedir('/api/tocar?c=' + c + '&s=' + s + (artista ? '&artista=1' : ''), function(d){ pintar(d); aviso(artista ? 'Sonando todo el artista' : 'Sonando en el radio'); });
 }
-function filasCanciones(arr, conMas){
+function filasCanciones(arr, conArtista){
   if (!arr || !arr.length) return '<div class="vacio">Sin resultados</div>';
   var h = '';
   for (var i = 0; i < arr.length; i++) {
     var it = arr[i];
     h += '<div class="item" onclick="tocar(' + it.c + ',' + it.s + ')"><div class="tx"><div class="t">' + esc(it.t) + '</div>' +
          (it.a ? '<div class="a">' + esc(it.a) + '</div>' : '') + '</div>' +
-         (conMas && it.a ? '<button class="mas" onclick="event.stopPropagation();tocar(' + it.c + ',' + it.s + ',1)">Todo el artista</button>' : '') + '</div>';
+         (conArtista && it.a ? '<button class="mini" onclick="event.stopPropagation();tocar(' + it.c + ',' + it.s + ',1)">Todo el artista</button>' : '') +
+         '<button class="mini" onclick="event.stopPropagation();elegirLista({c:' + it.c + ',s:' + it.s + '},this)" data-t="' + esc(it.t) + '">+</button></div>';
   }
   return h;
 }
+
+/* ---- Carpetas ---- */
 function verCarpetas(){
-  carpetaAbierta = null;
   $('lista').innerHTML = '<div class="vacio">Cargando...</div>';
   pedir('/api/carpetas', function(arr){
     if (!arr) { $('lista').innerHTML = '<div class="vacio">No se pudo cargar</div>'; return; }
     if (!arr.length) { $('lista').innerHTML = '<div class="vacio">El radio no tiene música cargada</div>'; return; }
     var h = '';
-    for (var i = 0; i < arr.length; i++) h += '<div class="item" onclick="abrir(' + arr[i].c + ',\'' + esc(arr[i].n).replace(/'/g, "\\'") + '\')"><div class="tx"><div class="t">' + esc(arr[i].n) + '</div></div><span class="n">' + arr[i].total + ' &rsaquo;</span></div>';
+    for (var i = 0; i < arr.length; i++) h += '<div class="item" onclick="abrir(' + arr[i].c + ',this)" data-n="' + esc(arr[i].n) + '"><div class="tx"><div class="t">' + esc(arr[i].n) + '</div></div><span class="n">' + arr[i].total + ' &rsaquo;</span></div>';
     $('lista').innerHTML = h;
   });
 }
-function abrir(c, nombre){
-  carpetaAbierta = c;
+function abrir(c, el){
+  var nombre = el.getAttribute('data-n');
   $('lista').innerHTML = '<div class="vacio">Cargando...</div>';
   pedir('/api/canciones?c=' + c, function(arr){
     $('lista').innerHTML = '<div class="item" onclick="verCarpetas()"><span class="volver">&lsaquo; Carpetas</span><span class="n" style="margin-left:auto">' + esc(nombre) + '</span></div>' + filasCanciones(arr, false);
   });
 }
+
+/* ---- Buscar ---- */
 function buscar(){
   var q = $('q').value.trim();
   if (!q) { $('lista').innerHTML = '<div class="vacio">Escribe un artista o canción</div>'; return; }
-  pedir('/api/buscar?q=' + encodeURIComponent(q), function(arr){ $('lista').innerHTML = filasCanciones(arr, true); });
-}
-function verTab(t){
-  tab = t;
-  $('tabC').className = t === 'c' ? 'on' : ''; $('tabB').className = t === 'b' ? 'on' : '';
-  $('cajaB').style.display = t === 'b' ? 'flex' : 'none';
-  if (t === 'c') verCarpetas(); else { buscar(); $('q').focus(); }
+  $('lista').innerHTML = '<div class="vacio">Buscando...</div>';
+  pedir('/api/buscar?q=' + encodeURIComponent(q), function(arr){ if ($('q').value.trim() === q) $('lista').innerHTML = filasCanciones(arr, true); });
 }
 $('q').addEventListener('input', function(){ clearTimeout(tBusq); tBusq = setTimeout(buscar, 400); });
+
+/* ---- Listas ---- */
+function verListas(){
+  listaAbierta = null;
+  $('cajaL').style.display = 'block';
+  $('lista').innerHTML = '<div class="vacio">Cargando...</div>';
+  pedir('/api/listas', function(arr){
+    if (!arr) { $('lista').innerHTML = '<div class="vacio">No se pudo cargar</div>'; return; }
+    var h = '';
+    for (var i = 0; i < arr.length; i++) h += '<div class="item" onclick="abrirLista(this)" data-n="' + esc(arr[i].n) + '"><div class="tx"><div class="t">' + (arr[i].n === 'Favoritas' ? '&#9733; ' : '') + esc(arr[i].n) + '</div></div><span class="n">' + arr[i].total + ' &rsaquo;</span></div>';
+    $('lista').innerHTML = h || '<div class="vacio">No hay listas todavía</div>';
+  });
+}
+function abrirLista(el){ listaAbierta = el.getAttribute('data-n'); pintarLista(); }
+function pintarLista(){
+  var n = listaAbierta;
+  $('cajaL').style.display = 'none';
+  $('lista').innerHTML = '<div class="vacio">Cargando...</div>';
+  pedir('/api/lista_ver?n=' + encodeURIComponent(n), function(arr){
+    var h = '<div class="item"><span class="volver" onclick="verListas()">&lsaquo; Listas</span><span class="n" style="margin-left:auto;margin-right:8px">' + esc(n) + '</span>' +
+            '<button class="mini rojo" onclick="borrarLista()">' + (n === 'Favoritas' ? 'Vaciar' : 'Borrar lista') + '</button></div>';
+    if (!arr || !arr.length) h += '<div class="vacio">Lista vacía. Agrega canciones con el botón + en Carpetas o Buscar.</div>';
+    else for (var i = 0; i < arr.length; i++) {
+      h += '<div class="item" onclick="tocarLista(' + arr[i].i + ')"><div class="tx"><div class="t">' + esc(arr[i].t) + '</div>' + (arr[i].a ? '<div class="a">' + esc(arr[i].a) + '</div>' : '') + '</div>' +
+           '<button class="mini rojo" onclick="event.stopPropagation();quitar(' + arr[i].i + ')">Quitar</button></div>';
+    }
+    $('lista').innerHTML = h;
+  });
+}
+function tocarLista(i){ pedir('/api/lista_tocar?n=' + encodeURIComponent(listaAbierta) + '&i=' + i, function(d){ pintar(d); aviso('Sonando la lista en el radio'); }); }
+function quitar(i){ pedir('/api/lista_quitar?n=' + encodeURIComponent(listaAbierta) + '&i=' + i, function(){ aviso('Quitada de la lista'); pintarLista(); }); }
+function borrarLista(){
+  var n = listaAbierta;
+  if (!confirm(n === 'Favoritas' ? '¿Quitar todas las canciones de Favoritas?' : '¿Borrar la lista "' + n + '"?')) return;
+  pedir('/api/lista_borrar?n=' + encodeURIComponent(n), function(){ aviso(n === 'Favoritas' ? 'Favoritas vaciada' : 'Lista borrada'); verListas(); });
+}
+function nuevaLista(cb){
+  var n = prompt('Nombre de la nueva lista:');
+  if (!n || !n.trim()) return;
+  pedir('/api/lista_crear?n=' + encodeURIComponent(n.trim()), function(r){
+    if (r && r.ok) { aviso('Lista creada'); if (cb) cb(n.trim()); else verListas(); }
+    else aviso((r && r.msg) || 'No se pudo crear');
+  });
+}
+
+/* ---- Agregar a lista ---- */
+function elegirLista(cancion, boton){
+  paraAgregar = cancion;
+  $('hojaTit').textContent = boton ? boton.getAttribute('data-t') : 'La canción que está sonando';
+  $('hojaListas').innerHTML = '<div class="vacio">Cargando...</div>';
+  $('velo').className = 'velo ver';
+  pedir('/api/listas', function(arr){
+    var h = '<div class="item" onclick="nuevaLista(agregarA)"><span class="volver">+ Nueva lista</span></div>';
+    if (arr) for (var i = 0; i < arr.length; i++) h += '<div class="item" onclick="agregarA(this.getAttribute(\'data-n\'))" data-n="' + esc(arr[i].n) + '"><div class="tx"><div class="t">' + (arr[i].n === 'Favoritas' ? '&#9733; ' : '') + esc(arr[i].n) + '</div></div><span class="n">' + arr[i].total + '</span></div>';
+    $('hojaListas').innerHTML = h;
+  });
+}
+function agregarActual(){ elegirLista({actual:1}, null); }
+function agregarA(n){
+  var c = paraAgregar; if (!c) return;
+  var q = '/api/lista_agregar?n=' + encodeURIComponent(n) + (c.actual ? '&actual=1' : '&c=' + c.c + '&s=' + c.s);
+  pedir(q, function(r){ cerrarHoja(); aviso(r && r.ok ? ((r.msg || 'Agregada') + ' → ' + n) : ((r && r.msg) || 'No se pudo agregar')); if (tab === 'l' && listaAbierta === n) pintarLista(); });
+}
+function cerrarHoja(){ $('velo').className = 'velo'; paraAgregar = null; }
+
+function verTab(t){
+  tab = t;
+  $('tabC').className = t === 'c' ? 'on' : ''; $('tabB').className = t === 'b' ? 'on' : ''; $('tabL').className = t === 'l' ? 'on' : '';
+  $('cajaB').style.display = t === 'b' ? 'flex' : 'none';
+  $('cajaL').style.display = 'none';
+  if (t === 'c') verCarpetas(); else if (t === 'b') { buscar(); $('q').focus(); } else verListas();
+}
 estado(); verCarpetas();
 setInterval(estado, 1500);
 </script>
