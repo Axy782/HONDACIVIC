@@ -311,12 +311,19 @@ public class MainActivity extends Activity {
         return m;
     }
     private int entero(String s, int def) { try { return Integer.parseInt(s); } catch (Exception e) { return def; } }
+    private String ultPathIdx = null; private int ultC = -1, ultS = -1;
     private String estadoJson() throws Exception {
         org.json.JSONObject o = new org.json.JSONObject();
         Song s = cancionActual();
         o.put("titulo", s != null ? (s.title != null && s.title.length() > 0 ? s.title : nombreDe(s)) : "");
         o.put("artista", s != null && s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
         o.put("id", s != null && s.path != null ? Integer.toHexString(s.path.hashCode()) : "");
+        if (s != null && s.path != null) {   // donde esta la que suena (para editarla desde el celular)
+            if (!s.path.equals(ultPathIdx)) { ultPathIdx = s.path; ultC = -1; ultS = -1;
+                for (int k = 0; k < carpetas.size() && ultC < 0; k++) { Carpeta cc = carpetas.get(k); if (cc.esLista || cc == carpetaBusqueda || cc.songs == null) continue;
+                    for (int i = 0; i < cc.songs.size(); i++) { Song x = cc.songs.get(i); if (x.path != null && x.path.equals(s.path)) { ultC = k; ultS = i; break; } } } }
+            o.put("c", ultC); o.put("s", ultS);
+        }
         boolean sonando = false; int pos = 0, dur = 0;
         try { if (mp != null && prepared) { sonando = mp.isPlaying(); pos = mp.getCurrentPosition(); dur = mp.getDuration(); } } catch (Exception e) {}
         o.put("sonando", sonando); o.put("pos", pos); o.put("dur", dur);
@@ -376,6 +383,36 @@ public class MainActivity extends Activity {
             actualizarHeaderLista();
         } catch (Exception e) {}
     }
+    // Devuelve la cancion [c,s] leida en el hilo de la pantalla
+    private Song cancionRemota(final java.util.HashMap<String,String> p) {
+        final Song[] r = new Song[1];
+        enUi(new java.util.concurrent.Callable<String>() { public String call() {
+            int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1);
+            if (c >= 0 && c < carpetas.size() && carpetas.get(c).songs != null && i >= 0 && i < carpetas.get(c).songs.size()) r[0] = carpetas.get(c).songs.get(i);
+            else if ("1".equals(p.get("actual"))) r[0] = cancionActual();
+            return "";
+        }});
+        return r[0];
+    }
+    // Busca caratulas en internet para una cancion (iTunes + Deezer) y devuelve las URLs
+    private String caratulasRemoto(java.util.HashMap<String,String> p) {
+        Song s = cancionRemota(p);
+        org.json.JSONArray arr = new org.json.JSONArray();
+        if (s == null) return arr.toString();
+        String tit = p.get("t") != null ? p.get("t").trim() : (s.title != null ? s.title : nombreDe(s));
+        String art = p.get("a") != null ? p.get("a").trim() : (s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
+        if (art.length() == 0 && tit.indexOf("-") >= 0) { String[] pz = tit.split("\\s*-\\s*"); if (pz.length >= 2) { art = pz[0].trim(); tit = pz[pz.length - 1].trim(); } }
+        String artL = limpiarBusqueda(art), titL = limpiarBusqueda(tit);
+        java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
+        try {
+            if (artL.length() > 0 && titL.length() > 0) { urlsDeItunes(artL + " " + titL, urls); urlsDeDeezer(artL + " " + titL, urls); }
+            if (urls.size() < 6 && titL.length() > 0) { urlsDeItunes(titL, urls); urlsDeDeezer(titL, urls); }
+            if (urls.size() < 6 && artL.length() > 0) { urlsDeItunes(artL, urls); }
+        } catch (Throwable e) {}
+        java.util.LinkedHashSet<String> unicas = new java.util.LinkedHashSet<String>(urls);
+        for (String u : unicas) { if (arr.length() >= 18) break; arr.put(u); }
+        return arr.toString();
+    }
     private ServidorWifi.Control crearControlRemoto() {
         return new ServidorWifi.Control() {
             public String paginaControl() {
@@ -411,6 +448,7 @@ public class MainActivity extends Activity {
                 ultimoContactoCel = System.currentTimeMillis();   // el celular sigue conectado
                 final java.util.HashMap<String,String> p = parametros(ruta);
                 if (ruta.startsWith("/api/buscar")) return buscarRemoto(p.get("q"));   // en segundo plano (no congela el radio)
+                if (ruta.startsWith("/api/caratulas")) return caratulasRemoto(p);     // busca en internet (no en la pantalla)
                 return enUi(new java.util.concurrent.Callable<String>() { public String call() throws Exception {
                     if (ruta.startsWith("/api/estado")) return estadoJson();
                     if (ruta.startsWith("/api/cmd")) {
@@ -425,7 +463,7 @@ public class MainActivity extends Activity {
                         else if (a.equals("repetir")) { repeat = (repeat == 1) ? 0 : 1; pintarRepeat(); }
                         else if (a.equals("seek")) {
                             int ms = entero(p.get("ms"), -1);
-                            try { if (mp != null && prepared && ms >= 0) { mp.seekTo(Math.min(ms, mp.getDuration())); seek.setProgress(mp.getCurrentPosition()); } } catch (Exception e) {}
+                            try { if (mp != null && prepared && ms >= 0) { mp.seekTo(Math.min(ms, mp.getDuration())); seek.setProgress(mp.getCurrentPosition()); if (analizador != null) analizador.saltoA(ms); } } catch (Exception e) {}
                         }
                         return estadoJson();
                     }
@@ -497,6 +535,43 @@ public class MainActivity extends Activity {
                         if (l != null) for (int k = 0; k < l.length(); k++) { Song s = songPorRuta(l.optString(k)); if (s != null) { arr.add(s); if (k == i) sel = s; } }
                         if (!arr.isEmpty()) reproducirLista(arr, sel != null ? sel : arr.get(0));
                         return estadoJson();
+                    }
+                    if (ruta.startsWith("/api/caratula_aplicar")) {
+                        Song s = null;
+                        int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1);
+                        if (c >= 0 && c < carpetas.size() && i >= 0 && i < carpetas.get(c).songs.size()) s = carpetas.get(c).songs.get(i);
+                        String url = p.get("url");
+                        if (s == null || url == null || !url.startsWith("http")) return "{\"ok\":false}";
+                        String tit = p.get("t") != null && p.get("t").trim().length() > 0 ? p.get("t").trim() : (s.title != null ? s.title : "");
+                        String art = p.get("a") != null ? p.get("a").trim() : (s.artist != null ? s.artist : "");
+                        aplicarCaratula(s, url, tit, art);
+                        return "{\"ok\":true}";
+                    }
+                    if (ruta.startsWith("/api/nombre")) {
+                        Song s = null;
+                        int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1);
+                        if (c >= 0 && c < carpetas.size() && i >= 0 && i < carpetas.get(c).songs.size()) s = carpetas.get(c).songs.get(i);
+                        String tit = p.get("t") != null ? p.get("t").trim() : "";
+                        if (s == null || tit.length() == 0) return "{\"ok\":false,\"msg\":\"Falta el nombre\"}";
+                        guardarNombre(s, tit, p.get("a") != null ? p.get("a").trim() : "");
+                        return "{\"ok\":true}";
+                    }
+                    if (ruta.startsWith("/api/destinos")) {
+                        org.json.JSONArray arr = new org.json.JSONArray();
+                        for (int k = 0; k < carpetas.size(); k++) {
+                            Carpeta cc = carpetas.get(k);
+                            if (cc.esLista || cc == carpetaBusqueda || cc.path == null) continue;
+                            org.json.JSONObject o = new org.json.JSONObject(); o.put("c", k); o.put("n", cc.name); arr.put(o);
+                        }
+                        return arr.toString();
+                    }
+                    if (ruta.startsWith("/api/mover")) {
+                        int c = entero(p.get("c"), -1), i = entero(p.get("s"), -1), d = entero(p.get("d"), -1);
+                        if (c < 0 || c >= carpetas.size() || i < 0 || i >= carpetas.get(c).songs.size() || d < 0 || d >= carpetas.size()) return "{\"ok\":false}";
+                        Carpeta dest = carpetas.get(d);
+                        if (dest.esLista || dest.path == null || d == c) return "{\"ok\":false,\"msg\":\"Esa carpeta no sirve\"}";
+                        moverArchivo(carpetas.get(c).songs.get(i), dest);
+                        return "{\"ok\":true}";
                     }
                     if (ruta.startsWith("/api/carpetas")) {
                         org.json.JSONArray arr = new org.json.JSONArray();
@@ -641,6 +716,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean shuffle = false;
+    private boolean optEqFino = true;   // ecualizador de 16 bits (natural). Si el radio se traba, se apaga en Ajustes
     private int repeat = 0;
     private boolean prepared = false;
     private boolean noAutoStart = false;
@@ -932,6 +1008,12 @@ public class MainActivity extends Activity {
         final CheckBox chkAutoplay = (CheckBox) findViewById(R.id.chkAutoplay);
         final CheckBox chkPausaUsb = (CheckBox) findViewById(R.id.chkPausaUsb);
         final CheckBox chkPantalla = (CheckBox) findViewById(R.id.chkPantalla);
+        final CheckBox chkEqFino = (CheckBox) findViewById(R.id.chkEqFino);
+        optEqFino = prefs.getBoolean("eqFino", true); chkEqFino.setChecked(optEqFino);
+        chkEqFino.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){
+            optEqFino = c; prefs.edit().putBoolean("eqFino", c).apply();
+            if (c) { Song sc = cancionActual(); if (sc != null && prepared) iniciarAnalizador(sc.path); } else detenerAnalizador();
+        }});
         final CheckBox chkWifiAuto = (CheckBox) findViewById(R.id.chkWifiAuto);
         chkWifiAuto.setChecked(prefs.getBoolean("wifiAuto", true));
         chkWifiAuto.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener(){ public void onCheckedChanged(CompoundButton b, boolean c){
@@ -1037,7 +1119,7 @@ public class MainActivity extends Activity {
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             public void onProgressChanged(SeekBar s, int p, boolean fromUser){ if(fromUser && mp!=null && prepared) txtCur.setText(fmt(p)); }
             public void onStartTrackingTouch(SeekBar s){}
-            public void onStopTrackingTouch(SeekBar s){ if(mp!=null && prepared) mp.seekTo(s.getProgress()); }
+            public void onStopTrackingTouch(SeekBar s){ if(mp!=null && prepared) { mp.seekTo(s.getProgress()); try { if (analizador != null) analizador.saltoA(s.getProgress()); } catch (Exception e) {} } }
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
@@ -2089,6 +2171,7 @@ public class MainActivity extends Activity {
         if (posEnOrden < 0 || posEnOrden >= order.size()) return;
         final Song s = songs.get(order.get(posEnOrden));
         prepared = false;
+        detenerAnalizador();
         try {
             if (mp != null) { mp.reset(); }
             else {
@@ -2107,6 +2190,7 @@ public class MainActivity extends Activity {
                     if (noAutoStart) { noAutoStart = false; pintarPlay(false); }
                     else { pedirFoco(); m.start(); pintarPlay(true); handler.post(actualizador); }
                     attachVisualizer();
+                    iniciarAnalizador(s.path);
                 }
             });
             mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
@@ -3181,6 +3265,24 @@ public class MainActivity extends Activity {
             set.setInterpolator(new android.view.animation.DecelerateInterpolator());
             letrasTexto.startAnimation(set);
         } catch (Exception e) {}
+    }
+    // ===== ANALIZADOR DE 16 BITS (ecualizador natural). Si falla, vuelve solo al Visualizer =====
+    private AnalizadorAudio analizador = null;
+    private void detenerAnalizador() {
+        try { if (analizador != null) analizador.detener(); } catch (Throwable e) {}
+        analizador = null;
+        try { if (eqNombre != null) eqNombre.setExterno(false); } catch (Throwable e) {}
+    }
+    private void iniciarAnalizador(String path) {
+        detenerAnalizador();
+        if (!optEqFino || path == null || mp == null) return;
+        try {
+            final AnalizadorAudio an = new AnalizadorAudio(path, mp, new AnalizadorAudio.Oyente() {
+                public void niveles(float[] b) { if (eqNombre != null) eqNombre.setNiveles(b); }
+                public void fallo() { runOnUiThread(new Runnable() { public void run() { if (analizador != null) { analizador = null; } try { eqNombre.setExterno(false); } catch (Throwable e) {} } }); }
+            });
+            if (an.iniciar()) { analizador = an; eqNombre.setExterno(true); }
+        } catch (Throwable e) { analizador = null; try { eqNombre.setExterno(false); } catch (Throwable e2) {} }
     }
     private void attachVisualizer() {
         try {
@@ -4671,6 +4773,7 @@ public class MainActivity extends Activity {
     }
     protected void onDestroy() {
         super.onDestroy();
+        detenerAnalizador();
         try { handler.removeCallbacks(vigilaControl); } catch (Exception e) {}
         handler.removeCallbacks(actualizador);
         try { if (usbReceiver != null) unregisterReceiver(usbReceiver); } catch (Exception e) {}

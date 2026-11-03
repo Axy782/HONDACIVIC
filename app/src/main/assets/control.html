@@ -72,6 +72,14 @@ button:active{transform:scale(.93);filter:brightness(1.25)}
 .hoja h3{margin:0 0 4px;font-size:16px}
 .hoja p{margin:0 0 12px;color:#8b8b9a;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hoja .item{background:#262633;border-radius:12px;margin-bottom:8px;border:none}
+.hoja input{width:100%;border:1px solid #2c2c3a;background:#262633;color:#f4f4f8;border-radius:12px;padding:0 14px;height:48px;font-size:16px;outline:none;margin-bottom:8px}
+.hoja .ok{width:100%;border:none;border-radius:12px;background:#FFB020;color:#1a1a1a;font-weight:bold;font-size:15px;padding:13px;margin:4px 0 8px}
+.opc{display:flex;align-items:center;gap:12px;background:#262633;border-radius:12px;padding:14px;margin-bottom:8px;font-size:15px;font-weight:bold}
+.opc span{font-size:20px;width:28px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#262633;display:block}
+.grid img.sel{outline:3px solid #FFB020}
+.edit{border:none;background:#262633;color:#FFB020;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:bold;flex:none;margin-left:6px}
 .hoja .cerrar{width:100%;border:none;border-radius:12px;background:#262633;color:#f4f4f8;padding:13px;font-size:15px;margin-top:4px}
 </style>
 </head>
@@ -83,7 +91,7 @@ button:active{transform:scale(.93);filter:brightness(1.25)}
   <div class="ahora">
     <div class="cov" id="cov"></div>
     <div class="info">
-      <div class="tit" id="tit">-</div>
+      <div style="display:flex;align-items:center;gap:6px"><div class="tit" id="tit" style="flex:1;min-width:0">-</div><button class="edit" onclick="opcionesActual()">&#8943;</button></div>
       <div class="art" id="art"></div>
       <input class="barra" id="prog" type="range" min="0" max="1000" value="0" aria-label="Posición de la canción">
       <div class="tiempos"><span id="tpos">0:00</span><span id="tdur">0:00</span></div>
@@ -132,10 +140,18 @@ button:active{transform:scale(.93);filter:brightness(1.25)}
     <button class="cerrar" onclick="cerrarHoja()">Cancelar</button>
   </div>
 </div>
+<div class="velo" id="velo2" onclick="if(event.target===this)cerrarHoja2()">
+  <div class="hoja">
+    <h3 id="h2tit">Opciones</h3>
+    <p id="h2sub"></p>
+    <div id="h2cuerpo"></div>
+    <button class="cerrar" onclick="cerrarHoja2()">Cerrar</button>
+  </div>
+</div>
 <div class="aviso" id="aviso"></div>
 
 <script>
-var ultimoId = null, tab = 'c', tBusq = null, durActual = 0, arrastrando = false, paraAgregar = null, listaAbierta = null;
+var actualCS = null, ultimoId = null, tab = 'c', tBusq = null, durActual = 0, arrastrando = false, paraAgregar = null, listaAbierta = null;
 function $(id){ return document.getElementById(id); }
 function fmt(ms){ ms = Math.max(0, Math.floor(ms/1000)); var m = Math.floor(ms/60), s = ms%60; return m + ':' + (s<10?'0':'') + s; }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -160,6 +176,7 @@ function pintar(d){
   $('brep').className = d.repetir ? 'on' : '';
   $('brep').textContent = 'Repetir esta canción: ' + (d.repetir ? 'Sí' : 'No');
   if (!volEsperando) mostrarVol(d.volApp != null ? d.volApp : 100, false);
+  actualCS = (d.c != null && d.c >= 0) ? { c: d.c, s: d.s, t: d.titulo || '', a: d.artista || '' } : null;
   if (d.id !== ultimoId) { ultimoId = d.id; $('cov').style.backgroundImage = d.id ? 'url(/caratula?v=' + d.id + ')' : 'none'; }
 }
 var volActual = 100, volEsperando = 0;
@@ -197,7 +214,7 @@ function filasCanciones(arr, conArtista){
     h += '<div class="item" onclick="tocar(' + it.c + ',' + it.s + ')"><div class="tx"><div class="t">' + esc(it.t) + '</div>' +
          (it.a ? '<div class="a">' + esc(it.a) + '</div>' : '') + '</div>' +
          (conArtista && it.a ? '<button class="mini" onclick="event.stopPropagation();tocar(' + it.c + ',' + it.s + ',1)">Todo el artista</button>' : '') +
-         '<button class="mini" onclick="event.stopPropagation();elegirLista({c:' + it.c + ',s:' + it.s + '},this)" data-t="' + esc(it.t) + '">+</button></div>';
+         '<button class="mini" onclick="event.stopPropagation();opciones(' + it.c + ',' + it.s + ',this)" data-t="' + esc(it.t) + '" data-a="' + esc(it.a) + '">&#8943;</button></div>';
   }
   return h;
 }
@@ -293,6 +310,76 @@ function agregarA(n){
   pedir(q, function(r){ cerrarHoja(); aviso(r && r.ok ? ((r.msg || 'Agregada') + ' → ' + n) : ((r && r.msg) || 'No se pudo agregar')); if (tab === 'l' && listaAbierta === n) pintarLista(); });
 }
 function cerrarHoja(){ $('velo').className = 'velo'; paraAgregar = null; }
+
+/* ---- Opciones de una cancion: nombre, caratula, mover, lista ---- */
+var opc = null;
+function opcionesActual(){ if (!actualCS) { aviso('No hay canción sonando'); return; } opciones(actualCS.c, actualCS.s, null, actualCS.t, actualCS.a); }
+function opciones(c, s, btn, t, a){
+  opc = { c: c, s: s, t: btn ? btn.getAttribute('data-t') : (t || ''), a: btn ? btn.getAttribute('data-a') : (a || '') };
+  $('h2tit').textContent = 'Opciones'; $('h2sub').textContent = opc.t + (opc.a ? ' · ' + opc.a : '');
+  $('h2cuerpo').innerHTML =
+    '<div class="opc" onclick="editarNombre()"><span>&#9998;</span>Editar nombre y artista</div>' +
+    '<div class="opc" onclick="buscarCaratulas()"><span>&#9635;</span>Buscar carátula en internet</div>' +
+    '<div class="opc" onclick="moverA()"><span>&#8599;</span>Mover a otra carpeta</div>' +
+    '<div class="opc" onclick="cerrarHoja2();elegirLista({c:' + c + ',s:' + s + '},null);$(\'hojaTit\').textContent=opc.t"><span>+</span>Agregar a una lista</div>';
+  $('velo2').className = 'velo ver';
+}
+function cerrarHoja2(){ $('velo2').className = 'velo'; }
+function editarNombre(){
+  $('h2tit').textContent = 'Editar nombre';
+  $('h2cuerpo').innerHTML = '<input id="eTit" placeholder="Nombre de la canción"><input id="eArt" placeholder="Artista"><button class="ok" onclick="guardarNombre()">Guardar en el radio</button>';
+  $('eTit').value = opc.t; $('eArt').value = opc.a; $('eTit').focus();
+}
+function guardarNombre(){
+  var t = $('eTit').value.trim(), a = $('eArt').value.trim();
+  if (!t) { aviso('Escribe el nombre'); return; }
+  pedir('/api/nombre?c=' + opc.c + '&s=' + opc.s + '&t=' + encodeURIComponent(t) + '&a=' + encodeURIComponent(a), function(r){
+    if (r && r.ok) { aviso('Nombre guardado'); cerrarHoja2(); setTimeout(recargarLista, 1500); } else aviso((r && r.msg) || 'No se pudo guardar');
+  });
+}
+var urlSel = null;
+function buscarCaratulas(){
+  $('h2tit').textContent = 'Buscar carátula';
+  $('h2cuerpo').innerHTML = '<input id="cTit" placeholder="Canción"><input id="cArt" placeholder="Artista"><button class="ok" onclick="pedirCaratulas()">Buscar</button><div id="cRes"></div>';
+  $('cTit').value = opc.t; $('cArt').value = opc.a;
+  pedirCaratulas();
+}
+function pedirCaratulas(){
+  var t = $('cTit').value.trim(), a = $('cArt').value.trim();
+  $('cRes').innerHTML = '<div class="vacio">Buscando en internet...</div>'; urlSel = null;
+  pedir('/api/caratulas?c=' + opc.c + '&s=' + opc.s + '&t=' + encodeURIComponent(t) + '&a=' + encodeURIComponent(a), function(arr){
+    if (!arr || !arr.length) { $('cRes').innerHTML = '<div class="vacio">No se encontró nada. Prueba con otro nombre.</div>'; return; }
+    var h = '<div class="grid">';
+    for (var i = 0; i < arr.length; i++) h += '<img src="' + esc(arr[i]) + '" onclick="elegirCar(this)" loading="lazy">';
+    $('cRes').innerHTML = h + '</div><div class="vacio" id="cAyuda">Toca una carátula para ponerla en el radio</div>';
+  });
+}
+function elegirCar(img){
+  var t = $('cTit').value.trim(), a = $('cArt').value.trim();
+  var url = img.getAttribute('src');
+  var todas = document.querySelectorAll('#cRes img'); for (var i = 0; i < todas.length; i++) todas[i].className = '';
+  img.className = 'sel';
+  if (!confirm('¿Poner esta carátula' + (t ? ' y el nombre "' + t + '"' : '') + ' en el radio?')) return;
+  pedir('/api/caratula_aplicar?c=' + opc.c + '&s=' + opc.s + '&url=' + encodeURIComponent(url) + '&t=' + encodeURIComponent(t) + '&a=' + encodeURIComponent(a), function(r){
+    if (r && r.ok) { aviso('Carátula enviada al radio'); cerrarHoja2(); ultimoId = null; setTimeout(recargarLista, 2500); } else aviso('No se pudo aplicar');
+  });
+}
+function moverA(){
+  $('h2tit').textContent = 'Mover a otra carpeta';
+  $('h2cuerpo').innerHTML = '<div class="vacio">Cargando carpetas...</div>';
+  pedir('/api/destinos', function(arr){
+    var h = '';
+    if (arr) for (var i = 0; i < arr.length; i++) { if (arr[i].c === opc.c) continue; h += '<div class="opc" onclick="confirmarMover(' + arr[i].c + ',this.getAttribute(\'data-n\'))" data-n="' + esc(arr[i].n) + '"><span>&#128193;</span>' + esc(arr[i].n) + '</div>'; }
+    $('h2cuerpo').innerHTML = h || '<div class="vacio">No hay otra carpeta en el USB</div>';
+  });
+}
+function confirmarMover(d, nombre){
+  if (!confirm('¿Mover "' + opc.t + '" a la carpeta "' + nombre + '"?')) return;
+  pedir('/api/mover?c=' + opc.c + '&s=' + opc.s + '&d=' + d, function(r){
+    if (r && r.ok) { aviso('Moviendo a ' + nombre + '...'); cerrarHoja2(); setTimeout(function(){ if (tab === 'c') verCarpetas(); else recargarLista(); }, 3000); } else aviso((r && r.msg) || 'No se pudo mover');
+  });
+}
+function recargarLista(){ if (tab === 'b') buscar(); else if (tab === 'l' && listaAbierta) pintarLista(); }
 
 function verTab(t){
   tab = t;

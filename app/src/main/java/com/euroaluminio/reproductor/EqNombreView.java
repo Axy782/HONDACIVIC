@@ -27,8 +27,18 @@ public class EqNombreView extends View {
     private boolean tieneAudio = false;   // true cuando llega FFT real
     private float picoGlobal = 8f;         // para auto-ganancia (se adapta al volumen de la canción)
 
+    private volatile boolean externo = false;   // true = los niveles vienen del AnalizadorAudio (16 bits); se ignora el Visualizer
+    public void setExterno(boolean e) { externo = e; }
+    // Niveles ya calculados (0..1 por barra) por el analizador de 16 bits
+    public void setNiveles(float[] v) {
+        if (v == null || v.length < N) return;
+        tieneAudio = true;
+        for (int i = 0; i < N; i++) target[i] = v[i];
+        if (activo) postInvalidate();
+    }
     // Recibe el análisis de frecuencias del audio y hace que las barras BAILEN con el ritmo
     public void setFft(byte[] fft) {
+        if (externo) return;
         if (fft == null || fft.length < 4) return;
         tieneAudio = true;
         int bins = fft.length / 2;
