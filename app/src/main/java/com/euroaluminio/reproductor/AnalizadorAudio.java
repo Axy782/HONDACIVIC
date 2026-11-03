@@ -13,6 +13,8 @@ import java.nio.ByteBuffer;
 public class AnalizadorAudio {
 
     public interface Oyente { void niveles(float[] bandas); void fallo(); }
+    public volatile String motivo = "";
+    public volatile long cuadros = 0;     // analisis con audio real (si sube, el eq de 16 bits esta trabajando)   // por que fallo (para mostrarlo en pantalla)
 
     private static final int N = 40;          // barras
     private static final int FFT = 2048;      // tamano del analisis
@@ -53,9 +55,9 @@ public class AnalizadorAudio {
                 String mime = f.getString(MediaFormat.KEY_MIME);
                 if (mime != null && mime.startsWith("audio/")) { pista = i; fmt = f; break; }
             }
-            if (pista < 0) { ex.release(); return false; }
+            if (pista < 0) { ex.release(); motivo = "el archivo no tiene pista de audio"; return false; }
             String mime = fmt.getString(MediaFormat.KEY_MIME);
-            if (mime.contains("wma") || mime.contains("opus")) { ex.release(); return false; }
+            if (mime.contains("wma") || mime.contains("opus")) { ex.release(); motivo = "formato " + mime + " no soportado"; return false; }
             try { rate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE); } catch (Exception e) {}
             try { canales = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT); } catch (Exception e) {}
             if (rate < 8000 || rate > 96000) rate = 44100;
@@ -79,7 +81,7 @@ public class AnalizadorAudio {
             hiloFft.setPriority(Thread.MIN_PRIORITY + 1);
             hiloFft.start();
             return true;
-        } catch (Throwable t) { corriendo = false; return false; }
+        } catch (Throwable t) { corriendo = false; motivo = "no se pudo abrir el decodificador: " + t; return false; }
     }
 
     public void detener() {
@@ -171,6 +173,7 @@ public class AnalizadorAudio {
         } catch (InterruptedException ie) {
         } catch (Throwable t) {
             errores++;
+            motivo = "error al decodificar: " + t;
             if (corriendo) { corriendo = false; try { oyente.fallo(); } catch (Throwable e) {} }
         } finally {
             try { codec.stop(); } catch (Throwable e) {}
@@ -224,12 +227,13 @@ public class AnalizadorAudio {
                 } else {
                     for (int i = 0; i < N; i++) salida[i] *= 0.85f;
                 }
+                if (hay) cuadros++;
                 try { oyente.niveles(salida); } catch (Throwable e) {}
                 long espera = siguiente - System.currentTimeMillis();
                 if (espera > 0) Thread.sleep(espera); else siguiente = System.currentTimeMillis();
             }
         } catch (InterruptedException ie) {
-        } catch (Throwable t) { if (corriendo) { corriendo = false; try { oyente.fallo(); } catch (Throwable e) {} } }
+        } catch (Throwable t) { motivo = "error al analizar: " + t; if (corriendo) { corriendo = false; try { oyente.fallo(); } catch (Throwable e) {} } }
     }
 
     // FFT radix-2 en sitio

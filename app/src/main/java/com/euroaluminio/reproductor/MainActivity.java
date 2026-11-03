@@ -2466,6 +2466,7 @@ public class MainActivity extends Activity {
         try { ((Button) findViewById(R.id.btnCerrarAjustes)).setText("‹ Menú"); } catch (Exception e) {}
     }
     private void pintarAjustes() {
+        try { TextView tv = (TextView) findViewById(R.id.txtEqEstado); if (tv != null) tv.setText(eqEstado.length() > 0 ? eqEstado : "Pon a sonar una canción para ver el estado"); } catch (Throwable e) {}
         pintarEstadoWifi();
         TextView tv = (TextView) findViewById(R.id.txtCarpetaVinc);
         Button bd = (Button) findViewById(R.id.btnDesvincular);
@@ -3273,16 +3274,44 @@ public class MainActivity extends Activity {
         analizador = null;
         try { if (eqNombre != null) eqNombre.setExterno(false); } catch (Throwable e) {}
     }
+    private String eqEstado = "";
+    private boolean eqAvisado = false;
+    private void ponerEstadoEq(String s, boolean aviso) {
+        eqEstado = s;
+        try { TextView tv = (TextView) findViewById(R.id.txtEqEstado); if (tv != null) tv.setText(s); } catch (Throwable e) {}
+        if (aviso) { try { Toast.makeText(this, s, Toast.LENGTH_LONG).show(); } catch (Throwable e) {} }
+    }
     private void iniciarAnalizador(String path) {
         detenerAnalizador();
-        if (!optEqFino || path == null || mp == null) return;
+        if (!optEqFino) { ponerEstadoEq("Apagado: usando el ecualizador básico", false); return; }
+        if (path == null || mp == null) return;
         try {
+            final AnalizadorAudio[] ref = new AnalizadorAudio[1];
             final AnalizadorAudio an = new AnalizadorAudio(path, mp, new AnalizadorAudio.Oyente() {
                 public void niveles(float[] b) { if (eqNombre != null) eqNombre.setNiveles(b); }
-                public void fallo() { runOnUiThread(new Runnable() { public void run() { if (analizador != null) { analizador = null; } try { eqNombre.setExterno(false); } catch (Throwable e) {} } }); }
+                public void fallo() { runOnUiThread(new Runnable() { public void run() {
+                    analizador = null;
+                    try { eqNombre.setExterno(false); } catch (Throwable e) {}
+                    String m = (ref[0] != null) ? ref[0].motivo : "";
+                    ponerEstadoEq("FALLÓ, usando el básico: " + m, true);
+                } }); }
             });
-            if (an.iniciar()) { analizador = an; eqNombre.setExterno(true); }
-        } catch (Throwable e) { analizador = null; try { eqNombre.setExterno(false); } catch (Throwable e2) {} }
+            ref[0] = an;
+            if (an.iniciar()) {
+                analizador = an; eqNombre.setExterno(true);
+                ponerEstadoEq("Arrancando...", false);
+                // a los 3 segundos confirmar que de verdad llegan datos de audio
+                handler.postDelayed(new Runnable() { public void run() {
+                    if (analizador != an) return;
+                    if (an.cuadros > 20) ponerEstadoEq("ACTIVO: barras de 16 bits (" + an.cuadros + " análisis)", !eqAvisado);
+                    else { ponerEstadoEq("No llegan datos (" + an.cuadros + "), usando el básico. " + an.motivo, true); detenerAnalizador(); }
+                    eqAvisado = true;
+                } }, 3000);
+            } else {
+                ponerEstadoEq("No disponible, usando el básico: " + an.motivo, !eqAvisado);
+                eqAvisado = true;
+            }
+        } catch (Throwable e) { analizador = null; try { eqNombre.setExterno(false); } catch (Throwable e2) {} ponerEstadoEq("No disponible: " + e, true); }
     }
     private void attachVisualizer() {
         try {

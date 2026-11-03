@@ -345,7 +345,7 @@
             <TextView android:id="@+id/tituloAjustes" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v223" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v224" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
@@ -491,6 +491,7 @@
                         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Ecualizador natural (16 bits)" android:textColor="@color/text" android:textSize="16sp" android:textStyle="bold"/>
                             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Las barras siguen cada instrumento. Si la m&#250;sica se entrecorta, ap&#225;galo." android:textColor="@color/muted" android:textSize="13sp"/>
+                            <TextView android:id="@+id/txtEqEstado" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textColor="@color/accent" android:textSize="13sp" android:textStyle="bold" android:paddingTop="4dp"/>
                         </LinearLayout>
                         <CheckBox android:id="@+id/chkEqFino" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
                     </LinearLayout>
