@@ -1111,9 +1111,10 @@ public class MainActivity extends Activity {
             }
         });
 
-        btnPlay.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ toggle(); }});
-        btnNext.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ siguiente(false); }});
-        btnPrev.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ anterior(); }});
+        // mientras suena la guia, play / siguiente / anterior manejan la guia (como si fuera una cancion)
+        btnPlay.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ if (guia != null) { guia.playPausa(); return; } toggle(); }});
+        btnNext.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ if (guia != null) { guia.siguientePaso(); return; } siguiente(false); }});
+        btnPrev.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ if (guia != null) { guia.pasoAnterior(); return; } anterior(); }});
         btnShuffle.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ ciclarAleatorio(); }});
         btnRepeat.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             repeat = (repeat == 1) ? 0 : 1; pintarRepeat();
@@ -1121,9 +1122,9 @@ public class MainActivity extends Activity {
         btnEq.setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarEq(); }});
 
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            public void onProgressChanged(SeekBar s, int p, boolean fromUser){ if(fromUser && mp!=null && prepared) txtCur.setText(fmt(p)); }
+            public void onProgressChanged(SeekBar s, int p, boolean fromUser){ if (fromUser && guia != null) { txtCur.setText(fmt(p)); return; } if(fromUser && mp!=null && prepared) txtCur.setText(fmt(p)); }
             public void onStartTrackingTouch(SeekBar s){}
-            public void onStopTrackingTouch(SeekBar s){ if(mp!=null && prepared) { mp.seekTo(s.getProgress()); try { if (analizador != null) analizador.saltoA(s.getProgress()); } catch (Exception e) {} } }
+            public void onStopTrackingTouch(SeekBar s){ if (guia != null) { guia.irA(s.getProgress()); return; } if(mp!=null && prepared) { mp.seekTo(s.getProgress()); try { if (analizador != null) analizador.saltoA(s.getProgress()); } catch (Exception e) {} } }
         });
 
         int maxv = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
@@ -2191,7 +2192,7 @@ public class MainActivity extends Activity {
                     txtDur.setText(fmt(m.getDuration()));
                     configurarEq();
                     if (posGuardadaMs > 0) { try { m.seekTo(posGuardadaMs); seek.setProgress(posGuardadaMs); txtCur.setText(fmt(posGuardadaMs)); } catch (Exception e) {} posGuardadaMs = 0; }
-                    if (noAutoStart) { noAutoStart = false; pintarPlay(false); }
+                    if (noAutoStart || guia != null) { noAutoStart = false; if (guia == null) pintarPlay(false); }   // con la guia sonando, la musica espera
                     else { pedirFoco(); m.start(); pintarPlay(true); handler.post(actualizador); }
                     attachVisualizer();
                     iniciarAnalizador(s.path);
@@ -2438,14 +2439,44 @@ public class MainActivity extends Activity {
     private void mostrarGuia() {
         if (guia != null) return;
         try {
+            // la guia "suena" dentro del reproductor: la musica real se pausa y la barra de abajo maneja la guia
+            try { if (mp != null && prepared && mp.isPlaying()) { mp.pause(); } } catch (Throwable e) {}
+            guiaAntes = new Object[]{ txtTitle.getText(), txtArtist.getText(), txtCur.getText(), txtDur.getText(), seek.getMax(), seek.getProgress() };
+            guiaPausaPintada = null;
+            try { mostrarPane(0); } catch (Throwable e) {}
             guia = new GuiaView(this, new GuiaView.Fin() {
                 public void terminada() { cerrarGuia(); }
                 public String accion(String que) { return accionGuia(que); }
+                public void progreso(int paso, long ms, long total, boolean pausado) { progresoGuia(paso, ms, total, pausado); }
             });
-            android.view.ViewGroup raiz = (android.view.ViewGroup) findViewById(android.R.id.content);
-            raiz.addView(guia, new android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            guia.setDentro(true);
+            View ancla = findViewById(R.id.btnAjustes);
+            android.view.ViewGroup raiz = (android.view.ViewGroup) ancla.getParent();   // zona de la caratula, encima de ella y debajo de los botones
+            raiz.addView(guia, raiz.indexOfChild(ancla), new android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            try { findViewById(R.id.btnVis).setVisibility(View.GONE); } catch (Throwable e) {}
+            txtTitle.setText("Guía de inicio");
+            txtArtist.setText("Sonido JFV · Bienvenido");
+            seek.setMax((int) GuiaView.total()); seek.setProgress(0);
+            txtCur.setText("0:00"); txtDur.setText(fmt((int) GuiaView.total()));
+            pintarPlay(true);
             android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(0f, 1f); a.setDuration(400); guia.startAnimation(a);
         } catch (Throwable e) { guia = null; }
+    }
+    private Object[] guiaAntes = null;
+    private Boolean guiaPausaPintada = null;
+    private boolean escucharAlCerrar = false;
+    private static final String[] GUIA_PASOS = { "Bienvenido", "Paso 1 de 4 · Memoria USB", "Paso 2 de 4 · Cómo suena", "Paso 3 de 4 · Control del celular", "Paso 4 de 4 · Todo listo" };
+    // la barra de abajo muestra la guia como si fuera una cancion sonando
+    private void progresoGuia(int paso, long ms, long total, boolean pausado) {
+        if (guia == null) return;
+        try {
+            txtTitle.setText("Guía de inicio");
+            txtArtist.setText("Sonido JFV · " + GUIA_PASOS[Math.max(0, Math.min(GUIA_PASOS.length - 1, paso))]);
+            if (seek.getMax() != (int) total) seek.setMax((int) total);
+            if (!seek.isPressed()) { seek.setProgress((int) ms); txtCur.setText(fmt((int) ms)); }
+            txtDur.setText(fmt((int) total));
+            if (guiaPausaPintada == null || guiaPausaPintada.booleanValue() != pausado) { guiaPausaPintada = pausado; pintarPlay(!pausado); }
+        } catch (Throwable e) {}
     }
     // lo que pasa al tocar cada cosa dentro de la guia: hace la funcion de verdad
     private String accionGuia(String que) {
@@ -2483,10 +2514,7 @@ public class MainActivity extends Activity {
                 return null;
             }
             if ("wifi".equals(que)) { alternarServidorWifi(); return "Control del celular encendido"; }
-            if ("escuchar".equals(que)) {
-                if (!(mp != null && prepared && mp.isPlaying())) toggle();
-                return null;
-            }
+            if ("escuchar".equals(que)) { escucharAlCerrar = true; return null; }   // suena al cerrar la guia
         } catch (Throwable e) { return "No se pudo hacer ahora"; }
         return null;
     }
@@ -2494,6 +2522,28 @@ public class MainActivity extends Activity {
         try { prefs.edit().putBoolean("guiaVista", true).apply(); } catch (Throwable e) {}   // ya no vuelve a salir sola
         if (guia == null) return;
         final GuiaView g = guia; guia = null;
+        // devuelve la barra de abajo a como estaba
+        try {
+            try { findViewById(R.id.btnVis).setVisibility(View.VISIBLE); } catch (Throwable e) {}
+            Song act = null;
+            try { if (posEnOrden >= 0 && posEnOrden < order.size()) act = songs.get(order.get(posEnOrden)); } catch (Throwable e) {}
+            if (act != null && mp != null && prepared) {
+                txtTitle.setText(act.title);
+                txtArtist.setText(act.artist != null && act.artist.length() > 0 ? act.artist : "Desconocido");
+                seek.setMax(mp.getDuration()); seek.setProgress(mp.getCurrentPosition());
+                txtCur.setText(fmt(mp.getCurrentPosition())); txtDur.setText(fmt(mp.getDuration()));
+            } else if (guiaAntes != null) {
+                txtTitle.setText((CharSequence) guiaAntes[0]); txtArtist.setText((CharSequence) guiaAntes[1]);
+                txtCur.setText((CharSequence) guiaAntes[2]); txtDur.setText((CharSequence) guiaAntes[3]);
+                seek.setMax((Integer) guiaAntes[4]); seek.setProgress((Integer) guiaAntes[5]);
+            }
+            guiaAntes = null;
+            pintarPlay(mp != null && prepared && mp.isPlaying());
+        } catch (Throwable e) {}
+        if (escucharAlCerrar) {
+            escucharAlCerrar = false;
+            handler.postDelayed(new Runnable(){ public void run(){ try { if (!(mp != null && prepared && mp.isPlaying())) toggle(); } catch (Throwable e) {} }}, 350);
+        }
         try {
             android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(1f, 0f); a.setDuration(300);
             a.setAnimationListener(new android.view.animation.Animation.AnimationListener() {
