@@ -28,19 +28,21 @@ public class EqNombreView extends View {
     private float picoGlobal = 8f;         // para auto-ganancia (se adapta al volumen de la canción)
 
     private volatile boolean externo = false;   // true = los niveles vienen del AnalizadorAudio (16 bits); se ignora el Visualizer
+    private volatile int nVis = N;              // barras que se dibujan (24 con el analizador, 40 con el Visualizer)
     public void setExterno(boolean e) { externo = e; }
     // Niveles ya calculados (0..1 por barra) por el analizador de 16 bits
     public void setNiveles(float[] v) {
-        if (v == null || v.length < N) return;
+        if (v == null || v.length == 0) return;
         tieneAudio = true;
-        for (int i = 0; i < N; i++) target[i] = v[i];
+        int n = Math.min(N, v.length); nVis = n;
+        for (int i = 0; i < n; i++) target[i] = v[i];
         if (activo) postInvalidate();
     }
     // Recibe el análisis de frecuencias del audio y hace que las barras BAILEN con el ritmo
     public void setFft(byte[] fft) {
         if (externo) return;
         if (fft == null || fft.length < 4) return;
-        tieneAudio = true;
+        tieneAudio = true; nVis = N;
         int bins = fft.length / 2;
         int usable = (int) (bins * 0.9f);
         for (int i = 0; i < N; i++) {
@@ -129,7 +131,8 @@ public class EqNombreView extends View {
         float bwidth = 190 * sc;
         pBar.setColor(color);
         cv.drawRect(bx, by, bx + bwidth, by + 2 * sc, pBar);
-        float step = bwidth / N;
+        int nb = externo ? nVis : N;
+        float step = bwidth / nb;
 
         long now = System.currentTimeMillis();
         if (!tieneAudio && now - lastT > 60) {   // respaldo: si el radio no da FFT, animación por tiempo
@@ -137,11 +140,13 @@ public class EqNombreView extends View {
             for (int i = 0; i < N; i++) target[i] = sonando ? (0.15f + rnd.nextFloat() * 0.85f) : 0.05f;
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
-        for (int i = 0; i < N; i++) {
-            if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;     // sube ágil
+        for (int i = 0; i < nb; i++) {
+            if (externo) h[i] = target[i];                                // el analizador ya trae el movimiento suavizado
+            else if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;   // sube ágil
             else h[i] += (target[i] - h[i]) * 0.32f;                      // baja con cuerpo (natural, no seco)
             float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
-            cv.drawRect(bx + i * step, by, bx + i * step + step * 0.6f, by + bh, pBar);
+            float ancho = externo ? step * 0.72f : step * 0.6f;          // con menos barras, mas anchas
+            cv.drawRect(bx + i * step, by, bx + i * step + ancho, by + bh, pBar);
         }
         // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento
         if (activo && sonando) postInvalidateDelayed(33);

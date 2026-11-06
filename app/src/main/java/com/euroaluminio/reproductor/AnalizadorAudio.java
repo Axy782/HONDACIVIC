@@ -16,7 +16,7 @@ public class AnalizadorAudio {
     public volatile String motivo = "";
     public volatile long cuadros = 0;     // analisis con audio real (si sube, el eq de 16 bits esta trabajando)   // por que fallo (para mostrarlo en pantalla)
 
-    private static final int N = 40;          // barras
+    private static final int N = 24;          // barras (menos y mas anchas: se lee mejor)
     private static final int FFT = 2048;      // tamano del analisis
     private static final int RING_SEG = 8;    // segundos guardados
     private static final float ADELANTO_SEG = 2.5f;
@@ -42,6 +42,8 @@ public class AnalizadorAudio {
     private final float[] magSuav = new float[FFT / 2];
     private final int[] bandaLo = new int[N], bandaHi = new int[N];
     private final float[] salida = new float[N];
+    private final float[] techo = new float[N];   // nivel maximo reciente de cada banda (auto-calibracion por instrumento)
+    private final float[] piso = new float[N];    // nivel minimo reciente
 
     public AnalizadorAudio(String path, MediaPlayer mp, Oyente o) { this.path = path; this.mp = mp; this.oyente = o; }
 
@@ -184,7 +186,7 @@ public class AnalizadorAudio {
 
     private void prepararBandas() {
         // bandas en escala logaritmica: graves con varias barras (bajo, bombo), medios (voz, piano), agudos (platillos)
-        double fMin = 40, fMax = Math.min(16000, rate / 2.0 * 0.95);
+        double fMin = 50, fMax = Math.min(14000, rate / 2.0 * 0.95);
         for (int i = 0; i < N; i++) {
             double f0 = fMin * Math.pow(fMax / fMin, (double) i / N);
             double f1 = fMin * Math.pow(fMax / fMin, (double) (i + 1) / N);
@@ -218,11 +220,20 @@ public class AnalizadorAudio {
                         float s = 0f; int c = 0;
                         for (int k = bandaLo[i]; k < bandaHi[i]; k++) { s += magSuav[k]; c++; }
                         float mag = (c > 0) ? s / c : 0f;
-                        float db = (float) (20.0 * Math.log10(mag + 1e-7));         // dBFS (0 = maximo)
-                        float v = (db - (-78f)) / (-18f - (-78f));                     // ventana de 60 dB como el PC
-                        v += 0.06f * ((float) i / N);                                // levanta apenas los agudos
+                        float db = (float) (20.0 * Math.log10(mag + 1e-7));         // dBFS
+                        // cada banda se calibra sola: el techo baja despacio, el piso sube despacio.
+                        // asi la voz o la trompeta (mas bajas que el bajo) tambien llenan su barra cuando suenan.
+                        if (techo[i] == 0f && piso[i] == 0f) { techo[i] = db + 6f; piso[i] = db - 30f; }
+                        if (db > techo[i]) techo[i] = db; else techo[i] -= 0.06f;      // ~3 dB por segundo
+                        if (db < piso[i]) piso[i] = db; else piso[i] += 0.04f;
+                        if (techo[i] - piso[i] < 24f) piso[i] = techo[i] - 24f;         // rango minimo 24 dB
+                        if (techo[i] - piso[i] > 50f) piso[i] = techo[i] - 50f;         // rango maximo 50 dB
+                        float v = (db - piso[i]) / (techo[i] - piso[i]);
                         if (v < 0f) v = 0f; if (v > 1f) v = 1f;
-                        salida[i] = v;
+                        v = v * v * (3f - 2f * v);                                     // curva suave: los picos saltan, lo bajo descansa
+                        // ataque rapido, caida lenta (como un VU de equipo de musica)
+                        if (v > salida[i]) salida[i] += (v - salida[i]) * 0.75f;
+                        else salida[i] += (v - salida[i]) * 0.18f;
                     }
                 } else {
                     for (int i = 0; i < N; i++) salida[i] *= 0.85f;

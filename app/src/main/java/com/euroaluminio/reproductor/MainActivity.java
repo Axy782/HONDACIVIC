@@ -456,6 +456,7 @@ public class MainActivity extends Activity {
                         if (a.equals("toggle")) toggle();
                         else if (a.equals("next")) siguiente(false);
                         else if (a.equals("prev")) anterior();
+                        else if (a.equals("vol")) { int v = entero(p.get("v"), -1); if (v >= 0) { volApp = Math.max(0f, Math.min(1f, v / 100f)); aplicarVolApp(); } }
                         else if (a.equals("volup")) cambiarVolumen(true);
                         else if (a.equals("voldown")) cambiarVolumen(false);
                         else if (a.equals("aleatorio")) ciclarAleatorio();
@@ -900,6 +901,9 @@ public class MainActivity extends Activity {
         findViewById(R.id.filaApariencia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secApariencia, "Apariencia"); }});
         findViewById(R.id.filaReproduccion).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secReproduccion, "Reproducción"); }});
         findViewById(R.id.filaWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secWifi, "Celular por WiFi"); }});
+        findViewById(R.id.filaGuia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarGuia(); }});
+        // GUIA DE INICIO: sale sola solo la primera vez
+        if (!prefs.getBoolean("guiaVista", false)) handler.postDelayed(new Runnable(){ public void run(){ mostrarGuia(); } }, 600);
         findViewById(R.id.btnDetectarUsb).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){
             detectarYEnfocarUsb();
         }});
@@ -2430,7 +2434,34 @@ public class MainActivity extends Activity {
     private void mostrarLista(boolean ver) { mostrarPane(ver ? 1 : 0); }
 
     @Override
+    // ===== GUIA DE INICIO (pantalla animada con los pasos para configurar) =====
+    private GuiaView guia = null;
+    private void mostrarGuia() {
+        if (guia != null) return;
+        try {
+            guia = new GuiaView(this, new GuiaView.Fin() { public void terminada() { cerrarGuia(); } });
+            android.view.ViewGroup raiz = (android.view.ViewGroup) findViewById(android.R.id.content);
+            raiz.addView(guia, new android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(0f, 1f); a.setDuration(400); guia.startAnimation(a);
+        } catch (Throwable e) { guia = null; }
+    }
+    private void cerrarGuia() {
+        try { prefs.edit().putBoolean("guiaVista", true).apply(); } catch (Throwable e) {}   // ya no vuelve a salir sola
+        if (guia == null) return;
+        final GuiaView g = guia; guia = null;
+        try {
+            android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(1f, 0f); a.setDuration(300);
+            a.setAnimationListener(new android.view.animation.Animation.AnimationListener() {
+                public void onAnimationStart(android.view.animation.Animation x) {}
+                public void onAnimationRepeat(android.view.animation.Animation x) {}
+                public void onAnimationEnd(android.view.animation.Animation x) { handler.post(new Runnable(){ public void run(){ try { ((android.view.ViewGroup) g.getParent()).removeView(g); } catch (Throwable e) {} } }); }
+            });
+            g.startAnimation(a);
+        } catch (Throwable e) { try { ((android.view.ViewGroup) g.getParent()).removeView(g); } catch (Throwable e2) {} }
+        try { mostrarPane(0); } catch (Throwable e) {}
+    }
     public void onBackPressed() {
+        if (guia != null) { cerrarGuia(); return; }
         View pv = findViewById(R.id.paneVideo);
         if (pv != null && pv.getVisibility() == View.VISIBLE) { cerrarVideo(); return; }
         if (paneAjustes != null && paneAjustes.getVisibility() == View.VISIBLE && enSeccionAjustes) { mostrarMenuAjustes(); return; }

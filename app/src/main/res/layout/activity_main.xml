@@ -345,7 +345,7 @@
             <TextView android:id="@+id/tituloAjustes" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v224" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v226" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
@@ -404,6 +404,17 @@
                     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Celular por WiFi" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
                         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Control remoto y enviar archivos" android:textColor="@color/muted" android:textSize="13sp"/>
+                    </LinearLayout>
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/filaGuia" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_ajuste"
+                    android:padding="14dp" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true">
+                    <TextView android:layout_width="52dp" android:layout_height="52dp" android:text="&#9654;" android:gravity="center"
+                        android:textColor="#1A1A1A" android:textSize="22sp" android:background="@color/accent"/>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginLeft="14dp">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Ver gu&#237;a de inicio" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold"/>
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="El paso a paso para configurar el radio" android:textColor="@color/muted" android:textSize="13sp"/>
                     </LinearLayout>
                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#8250;" android:textColor="@color/muted" android:textSize="26sp" android:paddingRight="6dp"/>
                 </LinearLayout>
