@@ -2465,7 +2465,19 @@ public class MainActivity extends Activity {
     private Object[] guiaAntes = null;
     private Boolean guiaPausaPintada = null;
     private boolean escucharAlCerrar = false;
-    private static final String[] GUIA_PASOS = { "Bienvenido", "Paso 1 de 4 · Memoria USB", "Paso 2 de 4 · Cómo suena", "Paso 3 de 4 · Control del celular", "Paso 4 de 4 · Todo listo" };
+    private int autoPlayIntentos = 0;
+    private boolean guiaSinAuto = false;
+    // espera a que el USB termine de cargar (primera vez) y entonces empieza a sonar
+    private final Runnable autoPlayGuia = new Runnable() { public void run() {
+        try {
+            if (guia != null) return;
+            if (mp != null && prepared && mp.isPlaying()) return;   // ya suena
+            if (!songs.isEmpty()) { noAutoStart = false; toggle(); return; }
+            if (++autoPlayIntentos < 30) handler.postDelayed(this, 1000);   // hasta ~30 s esperando la musica
+        } catch (Throwable e) {}
+    }};
+    private static final String[] GUIA_PASOS = { "Bienvenido", "Paso 1 de 7 · Memoria USB", "Paso 2 de 7 · Cómo suena", "Paso 3 de 7 · Canciones y búsqueda",
+        "Paso 4 de 7 · Favoritas y listas", "Paso 5 de 7 · Vistas y ecualizador", "Paso 6 de 7 · Carátulas", "Paso 7 de 7 · Control del celular", "Todo listo" };
     // la barra de abajo muestra la guia como si fuera una cancion sonando
     private void progresoGuia(int paso, long ms, long total, boolean pausado) {
         if (guia == null) return;
@@ -2478,6 +2490,7 @@ public class MainActivity extends Activity {
             if (guiaPausaPintada == null || guiaPausaPintada.booleanValue() != pausado) { guiaPausaPintada = pausado; pintarPlay(!pausado); }
         } catch (Throwable e) {}
     }
+    private void playPausaGuiaQuieta() { try { if (guia != null && !guia.estaPausado()) guia.playPausa(); } catch (Throwable e) {} }
     // lo que pasa al tocar cada cosa dentro de la guia: hace la funcion de verdad
     private String accionGuia(String que) {
         try {
@@ -2509,11 +2522,36 @@ public class MainActivity extends Activity {
                 return "Buscando música en el USB…";
             }
             if ("carpeta".equals(que)) {
+                guiaSinAuto = true;   // va a escoger carpeta: no arrancar musica todavia
                 cerrarGuia();
                 handler.postDelayed(new Runnable(){ public void run(){ try { abrirExplorador(); } catch (Throwable e) {} }}, 350);
                 return null;
             }
             if ("wifi".equals(que)) { alternarServidorWifi(); return "Control del celular encendido"; }
+            if ("canciones".equals(que) || "voz".equals(que)) {
+                final boolean voz = "voz".equals(que);
+                guiaSinAuto = true; cerrarGuia();
+                handler.postDelayed(new Runnable(){ public void run(){ try { mostrarLista(true); if (voz) buscarPorVoz(); } catch (Throwable e) {} }}, 350);
+                return null;
+            }
+            if ("fav".equals(que)) {
+                if (cancionActual() == null) return "Pon una canción y toca ★";
+                toggleFav(); return "★ Favoritas actualizadas";
+            }
+            if ("lista".equals(que)) return cancionActual() == null ? "Pon una canción y toca + Lista" : "Toca + Lista abajo, junto a ★";
+            if ("vista".equals(que)) {
+                findViewById(R.id.btnVis).performClick();
+                return efectoModo == 6 ? "Vista: disco girando" : efectoModo == 7 ? "Vista: letras" : efectoModo == 4 ? "Vista: sin efectos" : "Vista: barras con carátula";
+            }
+            if ("eq".equals(que)) {
+                if (mp == null || !prepared || eq == null) return "Pon una canción para usar el EQ";
+                playPausaGuiaQuieta(); mostrarEq(); return null;
+            }
+            if ("caratulas".equals(que)) {
+                guiaSinAuto = true; cerrarGuia();
+                handler.postDelayed(new Runnable(){ public void run(){ try { mostrarPane(2); abrirSeccionAjustes(R.id.secCaratulas, "Carátulas"); } catch (Throwable e) {} }}, 350);
+                return null;
+            }
             if ("escuchar".equals(que)) { escucharAlCerrar = true; return null; }   // suena al cerrar la guia
         } catch (Throwable e) { return "No se pudo hacer ahora"; }
         return null;
@@ -2540,10 +2578,12 @@ public class MainActivity extends Activity {
             guiaAntes = null;
             pintarPlay(mp != null && prepared && mp.isPlaying());
         } catch (Throwable e) {}
-        if (escucharAlCerrar) {
-            escucharAlCerrar = false;
-            handler.postDelayed(new Runnable(){ public void run(){ try { if (!(mp != null && prepared && mp.isPlaying())) toggle(); } catch (Throwable e) {} }}, 350);
-        }
+        // al cerrar la guia (como sea que se cierre) la musica arranca sola: auto play
+        escucharAlCerrar = false;
+        autoPlayIntentos = 0;
+        handler.removeCallbacks(autoPlayGuia);
+        if (!guiaSinAuto) handler.postDelayed(autoPlayGuia, 350);
+        guiaSinAuto = false;
         try {
             android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(1f, 0f); a.setDuration(300);
             a.setAnimationListener(new android.view.animation.Animation.AnimationListener() {

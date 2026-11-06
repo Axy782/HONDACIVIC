@@ -44,6 +44,9 @@ public class AnalizadorAudio {
     private final float[] salida = new float[N];
     private final float[] techo = new float[N];   // nivel maximo reciente de cada banda (auto-calibracion por instrumento)
     private final float[] piso = new float[N];    // nivel minimo reciente
+    private final float[] dbAnt = new float[N];   // nivel anterior de cada banda (para detectar golpes)
+    private final float[] golpe = new float[N];   // empujon que da cada golpe (bombo, tambora, guira) y que se apaga solo
+    private float graveProm = 0f;                 // energia promedio de los graves (para el "pum" del bombo)
 
     public AnalizadorAudio(String path, MediaPlayer mp, Oyente o) { this.path = path; this.mp = mp; this.oyente = o; }
 
@@ -214,8 +217,13 @@ public class AnalizadorAudio {
                     fft(re, im);
                     for (int k = 0; k < FFT / 2; k++) {
                         float m = (float) Math.sqrt(re[k] * re[k] + im[k] * im[k]) / (FFT / 4f);
-                        magSuav[k] = magSuav[k] * 0.55f + m * 0.45f;   // suavizado como smoothingTimeConstant del navegador
+                        magSuav[k] = magSuav[k] * 0.35f + m * 0.65f;   // menos suavizado: las barras siguen cada golpe
                     }
+                    // golpe de los graves (bombo / tambora): energia de las 5 primeras bandas contra su promedio
+                    float grave = 0f;
+                    for (int i = 0; i < 5; i++) { float s2 = 0f; for (int k = bandaLo[i]; k < bandaHi[i]; k++) s2 += magSuav[k]; grave += s2; }
+                    boolean pum = graveProm > 0f && grave > graveProm * 1.45f;
+                    graveProm = graveProm == 0f ? grave : graveProm * 0.94f + grave * 0.06f;
                     for (int i = 0; i < N; i++) {
                         float s = 0f; int c = 0;
                         for (int k = bandaLo[i]; k < bandaHi[i]; k++) { s += magSuav[k]; c++; }
@@ -223,17 +231,24 @@ public class AnalizadorAudio {
                         float db = (float) (20.0 * Math.log10(mag + 1e-7));         // dBFS
                         // cada banda se calibra sola: el techo baja despacio, el piso sube despacio.
                         // asi la voz o la trompeta (mas bajas que el bajo) tambien llenan su barra cuando suenan.
-                        if (techo[i] == 0f && piso[i] == 0f) { techo[i] = db + 6f; piso[i] = db - 30f; }
+                        if (techo[i] == 0f && piso[i] == 0f && db > -85f) { techo[i] = db + 6f; piso[i] = db - 30f; }
                         if (db > techo[i]) techo[i] = db; else techo[i] -= 0.06f;      // ~3 dB por segundo
                         if (db < piso[i]) piso[i] = db; else piso[i] += 0.04f;
                         if (techo[i] - piso[i] < 24f) piso[i] = techo[i] - 24f;         // rango minimo 24 dB
                         if (techo[i] - piso[i] > 50f) piso[i] = techo[i] - 50f;         // rango maximo 50 dB
-                        float v = (db - piso[i]) / (techo[i] - piso[i]);
+                        float v = (db - piso[i]) / (techo[i] + 4f - piso[i]);              // 4 dB de aire: solo los golpes fuertes llenan la barra
                         if (v < 0f) v = 0f; if (v > 1f) v = 1f;
                         v = v * v * (3f - 2f * v);                                     // curva suave: los picos saltan, lo bajo descansa
-                        // ataque rapido, caida lenta (como un VU de equipo de musica)
-                        if (v > salida[i]) salida[i] += (v - salida[i]) * 0.75f;
-                        else salida[i] += (v - salida[i]) * 0.18f;
+                        if (db < -85f) v = 0f;                                         // silencio de verdad: la barra no se llena con ruido
+                        // golpe: si la banda subio de repente (instrumento que entra), la barra brinca
+                        float sube = db - dbAnt[i]; dbAnt[i] = db;
+                        if (sube > 2.5f) golpe[i] = Math.max(golpe[i], Math.min(0.45f, (sube - 2.5f) * 0.06f));
+                        if (pum && i < 6) golpe[i] = Math.max(golpe[i], 0.35f - i * 0.04f);   // el bombo mueve los graves juntos
+                        v = Math.min(1f, v + golpe[i]);
+                        golpe[i] *= 0.72f;                                             // el empujon se apaga rapido
+                        // ataque casi inmediato, caida agil (baila, no se queda pegada)
+                        if (v > salida[i]) salida[i] += (v - salida[i]) * 0.9f;
+                        else salida[i] += (v - salida[i]) * 0.24f;
                     }
                 } else {
                     for (int i = 0; i < N; i++) salida[i] *= 0.85f;

@@ -19,7 +19,19 @@ public class EqNombreView extends View {
     private static final int N = 40;
     private final float[] h = new float[N];
     private final float[] target = new float[N];
-    private final float[] pico = new float[N];   // pico por banda: cada instrumento con su propia sensibilidad
+    private final float[] pico = new float[N];   // tapita que queda arriba de cada barra y cae con gravedad
+    private final float[] picoVel = new float[N];
+    private final android.graphics.RectF rb = new android.graphics.RectF();
+    // colores como en la guia: graves naranja, medios ambar, agudos amarillo claro
+    private static final int C_GRAVE = 0xFFD0601A, C_MEDIO = 0xFFFFB020, C_AGUDO = 0xFFFFD27A;
+    private static int mezcla(int a, int b, float t) {
+        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255, br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+        return 0xFF000000 | ((int) (ar + (br - ar) * t) << 16) | ((int) (ag + (bg - ag) * t) << 8) | (int) (ab + (bb - ab) * t);
+    }
+    private static int colorBanda(float f) {   // f = 0 (grave) .. 1 (agudo)
+        return f < 0.5f ? mezcla(C_GRAVE, C_MEDIO, f / 0.5f) : mezcla(C_MEDIO, C_AGUDO, (f - 0.5f) / 0.5f);
+    }
+    private static int aclarar(int c, float t) { return mezcla(c, 0xFFFFFFFF, t); }
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -100,7 +112,7 @@ public class EqNombreView extends View {
         float sc = Math.max(1f, w / 760f);
         int bw = (int) (200 * sc);
         int x = w - bw - (int) (24 * sc);
-        int y = hh / 2 - (int) (30 * sc);
+        int y = hh / 2 + (int) (10 * sc);      // un poco abajo: las barras paradas quedan encima del nombre
 
         // Ajustar el texto para que QUEPA (achica el tamaño; si aun asi es muy largo, corta con ...)
         String uA = upper(artista), uC = upper(cancion);
@@ -125,14 +137,15 @@ public class EqNombreView extends View {
         pText.setTextSize(szC);
         cv.drawText(uC, x, y + (int) (30 * sc), pText);
 
-        // línea + barras hacia ABAJO
-        float by = y + (int) (46 * sc);
-        float bx = x + 2;
+        // barras PARADAS como en la guia: crecen hacia arriba desde una linea, encima del nombre
         float bwidth = 190 * sc;
-        pBar.setColor(color);
-        cv.drawRect(bx, by, bx + bwidth, by + 2 * sc, pBar);
+        float bx = x + 2;
+        float base = y - szA - 10 * sc;          // la linea queda justo encima del artista
+        float alto = Math.min(110 * sc, base - 8 * sc);   // altura maxima de las barras
         int nb = externo ? nVis : N;
         float step = bwidth / nb;
+        float ancho = step * (externo ? 0.74f : 0.62f);
+        float radio = Math.min(ancho / 2f, 4 * sc);
 
         long now = System.currentTimeMillis();
         if (!tieneAudio && now - lastT > 60) {   // respaldo: si el radio no da FFT, animación por tiempo
@@ -140,13 +153,33 @@ public class EqNombreView extends View {
             for (int i = 0; i < N; i++) target[i] = sonando ? (0.15f + rnd.nextFloat() * 0.85f) : 0.05f;
         }
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
+        // linea base suave
+        pBar.setColor(0x55FFFFFF);
+        cv.drawRect(bx, base + 1 * sc, bx + bwidth, base + 2.5f * sc, pBar);
         for (int i = 0; i < nb; i++) {
-            if (externo) h[i] = target[i];                                // el analizador ya trae el movimiento suavizado
-            else if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;   // sube ágil
-            else h[i] += (target[i] - h[i]) * 0.32f;                      // baja con cuerpo (natural, no seco)
-            float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
-            float ancho = externo ? step * 0.72f : step * 0.6f;          // con menos barras, mas anchas
-            cv.drawRect(bx + i * step, by, bx + i * step + ancho, by + bh, pBar);
+            if (externo) h[i] = target[i];                                // el analizador ya trae el movimiento
+            else if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;
+            else h[i] += (target[i] - h[i]) * 0.32f;
+            float bh = 3 * sc + h[i] * alto;
+            float l = bx + i * step, r = l + ancho;
+            int col = colorBanda(nb > 1 ? (float) i / (nb - 1) : 0f);
+            // cuerpo de la barra (redondeada arriba) + punta mas clara cuando sube alto
+            pBar.setColor(col);
+            rb.set(l, base - bh, r, base); cv.drawRoundRect(rb, radio, radio, pBar);
+            if (h[i] > 0.35f) {
+                float punta = Math.min(bh * 0.28f, 14 * sc);
+                pBar.setColor(aclarar(col, 0.25f + 0.35f * h[i]));
+                rb.set(l, base - bh, r, base - bh + punta); cv.drawRoundRect(rb, radio, radio, pBar);
+            }
+            // tapita: se queda arriba un momento y cae con gravedad
+            float pAlt = h[i];
+            if (pAlt >= pico[i]) { pico[i] = pAlt; picoVel[i] = -0.004f; }
+            else { picoVel[i] += 0.0025f; pico[i] -= Math.max(0f, picoVel[i]); if (pico[i] < 0f) pico[i] = 0f; }
+            if (sonando && pico[i] > 0.04f) {
+                float py = base - 3 * sc - pico[i] * alto - 5 * sc;
+                pBar.setColor(aclarar(col, 0.55f));
+                rb.set(l, py, r, py + 3 * sc); cv.drawRoundRect(rb, 1.5f * sc, 1.5f * sc, pBar);
+            }
         }
         // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento
         if (activo && sonando) postInvalidateDelayed(33);

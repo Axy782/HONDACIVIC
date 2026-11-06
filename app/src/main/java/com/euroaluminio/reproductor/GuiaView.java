@@ -21,7 +21,7 @@ public class GuiaView extends View {
     public interface Fin { void terminada(); String accion(String que); void progreso(int paso, long ms, long total, boolean pausado); }   // accion devuelve el texto que se muestra
 
     private static final float VW = 800f, VH = 480f;      // pantalla virtual (se escala al radio)
-    private static final int PASOS = 5;
+    private static final int PASOS = 9;
     private static final long DUR = 9000;                   // ms por paso (avance automatico)
     private static final int AMBAR = 0xFFFFB020;
 
@@ -40,6 +40,7 @@ public class GuiaView extends View {
     // dentro = la guia suena DENTRO del reproductor, como si fuera una cancion:
     // la barra de abajo (play, anterior, siguiente, barra de tiempo) controla la guia
     private boolean dentro = false;
+    private boolean acabada = false;
     private long ultimoAviso = 0; private boolean pausaAvisada = false;
     private final RectF btnTerminar = new RectF();
     public void setDentro(boolean d) { dentro = d; }
@@ -64,27 +65,41 @@ public class GuiaView extends View {
     private RadialGradient fondo;
     private final RectF btnSig = new RectF(), btnAtras = new RectF(), btnSaltar = new RectF();
 
-    private static final String[] LABEL = { "BIENVENIDO", "PASO 1 DE 4", "PASO 2 DE 4", "PASO 3 DE 4", "PASO 4 DE 4" };
+    private static final String[] LABEL = { "BIENVENIDO", "PASO 1 DE 7", "PASO 2 DE 7", "PASO 3 DE 7", "PASO 4 DE 7", "PASO 5 DE 7", "PASO 6 DE 7", "PASO 7 DE 7", "LISTO" };
     private static final String[][] TITULO = {
         { "Tu música,", "como debe sonar" },
         { "Conecta tu", "memoria USB" },
         { "Escoge cómo", "suena" },
+        { "Encuentra", "cualquier canción" },
+        { "Guarda tus", "favoritas" },
+        { "Ponle", "efectos" },
+        { "Carátulas", "automáticas" },
         { "Controla desde", "el celular" },
         { "¡Todo listo!" } };
     private static final String[] TEXTO = {
-        "En menos de un minuto lo dejamos listo. Te enseñamos lo básico paso a paso.",
+        "En menos de dos minutos te enseñamos todo lo que hace tu radio.",
         "El radio busca la música solo. Si no aparece:",
         "",
+        "Toca Canciones, arriba a la derecha.",
+        "",
+        "",
+        "Con internet, el radio busca las carátulas solo.",
         "",
         "Esta guía no vuelve a salir sola. Para verla de nuevo:" };
     // *texto* = en color ambar
     private static final String[][] LISTA = {
         {},
         { "Ajustes > Música", "Toca *Detectar música del USB*", "O elige la carpeta exacta" },
-        { "*En orden*, *Aleat. carpeta* o *todo USB*", "*Sigue* con la próxima o *Repite 1*", "*Canciones*: carpetas, listas y buscar" },
+        { "*En orden*, *Aleat. carpeta* o *todo USB*", "*Sigue* con la próxima o *Repite 1*", "Abajo, a los lados del play" },
+        { "*Carpetas*: tal como están en el USB", "*Listas*: las que tú armas", "*Buscar* escribiendo o *por voz*" },
+        { "*★* marca la canción que suena", "*+ Lista* la agrega a una lista", "Mantén presionada para más opciones" },
+        { "*◉ Vista*: barras, disco o letras", "Las barras bailan con cada instrumento", "*EQ*: ajusta graves y agudos" },
+        { "Ajustes > *Carátulas*", "Toca *Descargar carátulas*", "Calidad *Normal*, *Alta* o *Máxima*" },
         { "Prende el *hotspot* del celular", "Conecta el radio a esa red WiFi", "Escanea el *QR* con el celular" },
         { "Ajustes > *Ver guía de inicio*" } };
-    private static final String[] NOTA = { "", "", "Siempre arranca en orden, con la siguiente pista.", "No gasta datos. Cambias canciones, volumen y carátulas.", "" };
+    private static final String[] NOTA = { "", "", "Siempre arranca en orden, con la siguiente pista.",
+        "Desliza la carátula para cambiar de canción.", "Las favoritas quedan guardadas en Listas.", "",
+        "También las buscas desde el celular.", "No gasta datos. Cambias canciones, volumen y listas.", "" };
 
     public GuiaView(Context c, Fin f) {
         super(c);
@@ -106,10 +121,10 @@ public class GuiaView extends View {
         if (nuevo >= PASOS) { terminar(); return; }
         paso = nuevo;
         inicioPaso = System.currentTimeMillis(); inicioAnim = inicioPaso;
-        aviso = null; tocoAlgo = false;
+        aviso = null; tocoAlgo = false; pausaHasta = 0;
         invalidate();
     }
-    private void terminar() { try { if (fin != null) fin.terminada(); } catch (Throwable e) {} }
+    private void terminar() { acabada = true; try { if (fin != null) fin.terminada(); } catch (Throwable e) {} }
 
     // mensaje real que manda la app (ej. "USB: 230 canciones")
     public void aviso(String s) { if (s == null) return; aviso = s; avisoDesde = System.currentTimeMillis(); postInvalidate(); }
@@ -157,6 +172,8 @@ public class GuiaView extends View {
         long ta = now - inicioAnim;                           // tiempo de animacion (nunca se congela)
         hitR.clear(); hitA.clear();
         if (paso < PASOS - 1 && t >= DUR) { ir(paso + 1); t = 0; }
+        // ultimo paso: al terminar, cierra sola y arranca la musica (auto play)
+        if (paso == PASOS - 1 && t >= 7000 && !acabada) { acabada = true; hacer("escuchar"); terminar(); }
         float avance = Math.min(1f, t / (float) DUR);
         if (dentro && fin != null && now - ultimoAviso > 250) {
             ultimoAviso = now;
@@ -360,7 +377,11 @@ public class GuiaView extends View {
             case 0: disco(cv, cx, cy, t, alfa); break;
             case 1: tarjetaUsb(cv, cx, cy, t, alfa); break;
             case 2: barraModos(cv, cx, cy, t, alfa); break;
-            case 3: radioCelular(cv, cx, cy, t, alfa); break;
+            case 3: listaCanciones(cv, cx, cy, t, alfa); break;
+            case 4: favoritos(cv, cx, cy, t, alfa); break;
+            case 5: vistas(cv, cx, cy, t, alfa); break;
+            case 6: caratulas(cv, cx, cy, t, alfa); break;
+            case 7: radioCelular(cv, cx, cy, t, alfa); break;
             default: listo(cv, cx, cy, t, alfa); break;
         }
     }
@@ -509,6 +530,182 @@ public class GuiaView extends View {
         p.setColor(conAlfa(AMBAR, alfa)); r.set(fx + 14, fy + 66, fx + 14 + 46 * vol, fy + 74); cv.drawRoundRect(r, 4, 4, p);
         p.setColor(conAlfa(0xFF2A2A36, alfa)); r.set(fx + 14, fy + 82, fx + 60, fy + 88); cv.drawRoundRect(r, 3, 3, p); r.set(fx + 14, fy + 96, fx + 60, fy + 102); cv.drawRoundRect(r, 3, 3, p);
         cv.drawText("CELULAR", fx + 37, fy + 164, pt);
+    }
+
+    // ----- Canciones: pestañas, buscador con microfono y filas -----
+    private void listaCanciones(Canvas cv, float cx, float cy, long t, int alfa) {
+        float l = cx - 170, tp = cy - 118, rr = cx + 170, b = cy + 118;
+        tarjeta(cv, l, tp, rr, b, alfa);
+        zona(l, tp + 40, rr, b, "canciones");
+        String[] tabs = { "Carpetas", "Listas", "Videos" };
+        int act = (int) ((t / 2200) % 3);
+        float tw = (rr - l - 24) / 3f;
+        pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(13); pt.setTextAlign(Paint.Align.CENTER);
+        for (int i = 0; i < 3; i++) {
+            float x0 = l + 12 + i * tw;
+            p.setColor(conAlfa(i == act ? 0xFF262633 : 0xFF1C1C26, alfa)); r.set(x0, tp + 12, x0 + tw - 4, tp + 40); cv.drawRoundRect(r, 8, 8, p);
+            pt.setColor(conAlfa(i == act ? AMBAR : 0xFF8B8B9A, alfa)); cv.drawText(tabs[i], x0 + tw / 2 - 2, tp + 31, pt);
+        }
+        // buscador que se escribe solo
+        p.setColor(conAlfa(0xFF0D0D14, alfa)); r.set(l + 12, tp + 50, rr - 56, tp + 84); cv.drawRoundRect(r, 10, 10, p);
+        String palabra = "bachata";
+        int n = (int) Math.min(palabra.length(), Math.max(0, ((t % 4400) - 400) / 220));
+        pt.setTypeface(Typeface.DEFAULT); pt.setTextAlign(Paint.Align.LEFT); pt.setTextSize(14);
+        pt.setColor(conAlfa(n == 0 ? 0xFF6A6A78 : 0xFFF4F4F8, alfa));
+        String vis = n == 0 ? "Buscar canción…" : palabra.substring(0, n);
+        cv.drawText(vis, l + 24, tp + 72, pt);
+        if (n > 0 && (t / 400) % 2 == 0) { p.setColor(conAlfa(AMBAR, alfa)); float cxr = l + 26 + pt.measureText(vis); cv.drawRect(cxr, tp + 58, cxr + 2, tp + 76, p); }
+        // microfono
+        float mx = rr - 34, my = tp + 67;
+        float lat = (float) (Math.sin(t / 300.0) * 0.5 + 0.5);
+        p.setColor(Color.argb((int) (alfa * (0.2f + 0.3f * lat)), 255, 176, 32)); cv.drawCircle(mx, my, 20, p);
+        p.setColor(conAlfa(AMBAR, alfa)); cv.drawCircle(mx, my, 16, p);
+        p.setColor(conAlfa(0xFF1A1A1A, alfa)); r.set(mx - 4, my - 9, mx + 4, my + 3); cv.drawRoundRect(r, 4, 4, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); r.set(mx - 7, my - 5, mx + 7, my + 6); cv.drawArc(r, 0, 180, false, p);
+        cv.drawLine(mx, my + 6, mx, my + 10, p); p.setStyle(Paint.Style.FILL);
+        zona(mx - 20, my - 20, mx + 20, my + 20, "voz");
+        // filas
+        String[][] filas = { { "Bachatas", "48 canciones" }, { "Merengue clásico", "62 canciones" }, { "Salsa 90", "35 canciones" } };
+        for (int i = 0; i < 3; i++) {
+            float y0 = tp + 96 + i * 44;
+            float ap = Math.max(0f, Math.min(1f, (t - 300 - i * 200) / 400f));
+            int a2 = (int) (alfa * ap);
+            p.setColor(conAlfa(0xFF2E2614, a2)); r.set(l + 14, y0 + 4, l + 44, y0 + 34); cv.drawRoundRect(r, 6, 6, p);
+            p.setColor(conAlfa(AMBAR, a2)); r.set(l + 20, y0 + 12, l + 38, y0 + 28); cv.drawRoundRect(r, 2, 2, p); cv.drawRect(l + 20, y0 + 9, l + 29, y0 + 13, p);
+            pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(14); pt.setColor(conAlfa(0xFFF4F4F8, a2)); cv.drawText(filas[i][0], l + 56, y0 + 18, pt);
+            pt.setTypeface(Typeface.DEFAULT); pt.setTextSize(11); pt.setColor(conAlfa(0xFF8B8B9A, a2)); cv.drawText(filas[i][1], l + 56, y0 + 33, pt);
+        }
+        toque(cv, mx, my, t, alfa);
+    }
+
+    // ----- Favoritas: la cancion que suena, estrella y + Lista -----
+    private void favoritos(Canvas cv, float cx, float cy, long t, int alfa) {
+        float l = cx - 170, tp = cy - 70, rr = cx + 170, b = cy + 70;
+        tarjeta(cv, l, tp, rr, b, alfa);
+        // caratula
+        p.setColor(conAlfa(0xFFD0601A, alfa)); r.set(l + 16, tp + 16, l + 92, tp + 92); cv.drawRoundRect(r, 10, 10, p);
+        p.setColor(conAlfa(AMBAR, alfa)); cv.drawCircle(l + 54, tp + 54, 24, p);
+        p.setColor(conAlfa(0xFF1A1A1A, alfa)); cv.drawCircle(l + 54, tp + 54, 5, p);
+        pt.setTextAlign(Paint.Align.LEFT); pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(15); pt.setColor(conAlfa(0xFFF4F4F8, alfa));
+        cv.drawText("Canción que suena", l + 106, tp + 42, pt);
+        pt.setTypeface(Typeface.DEFAULT); pt.setTextSize(12); pt.setColor(conAlfa(0xFF8B8B9A, alfa)); cv.drawText("Artista", l + 106, tp + 62, pt);
+        // barrita de progreso
+        float f = (t % 6000) / 6000f;
+        p.setColor(conAlfa(0xFF2A2A36, alfa)); r.set(l + 106, tp + 76, rr - 18, tp + 80); cv.drawRoundRect(r, 2, 2, p);
+        p.setColor(conAlfa(AMBAR, alfa)); r.set(l + 106, tp + 76, l + 106 + (rr - 18 - l - 106) * f, tp + 80); cv.drawRoundRect(r, 2, 2, p);
+        // estrella que se llena
+        float sx = l + 60, sy = tp + 118;
+        boolean llena = (t % 3200) > 1100;
+        float esc = llena ? 1f + 0.25f * (float) Math.max(0, 1 - ((t % 3200) - 1100) / 300.0) : 1f;
+        p.setColor(conAlfa(0xFF262633, alfa)); r.set(sx - 40, sy - 18, sx + 40, sy + 18); cv.drawRoundRect(r, 10, 10, p);
+        estrella(cv, sx, sy, 11 * esc, llena, alfa);
+        zona(sx - 40, sy - 18, sx + 40, sy + 18, "fav");
+        // + Lista
+        float bx = l + 120;
+        p.setColor(conAlfa(0xFF262633, alfa)); r.set(bx, sy - 18, bx + 96, sy + 18); cv.drawRoundRect(r, 10, 10, p);
+        pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(13); pt.setTextAlign(Paint.Align.CENTER); pt.setColor(conAlfa(0xFFF4F4F8, alfa));
+        cv.drawText("+ Lista", bx + 48, sy + 5, pt);
+        zona(bx, sy - 18, bx + 96, sy + 18, "lista");
+        if (llena) {
+            int a2 = (int) (alfa * Math.min(1f, ((t % 3200) - 1100) / 300f));
+            pt.setTypeface(Typeface.DEFAULT); pt.setTextSize(12); pt.setTextAlign(Paint.Align.LEFT); pt.setColor(Color.argb(a2, 78, 203, 122));
+            cv.drawText("Guardada", bx + 108, sy + 5, pt);
+        }
+        toque(cv, sx + 6, sy + 6, t, alfa);
+    }
+    private void estrella(Canvas cv, float x, float y, float R, boolean llena, int alfa) {
+        path.reset();
+        for (int i = 0; i < 10; i++) {
+            double ang = -Math.PI / 2 + i * Math.PI / 5;
+            float rad = (i % 2 == 0) ? R : R * 0.45f;
+            float px = x + (float) Math.cos(ang) * rad, py = y + (float) Math.sin(ang) * rad;
+            if (i == 0) path.moveTo(px, py); else path.lineTo(px, py);
+        }
+        path.close();
+        if (llena) { p.setColor(conAlfa(AMBAR, alfa)); cv.drawPath(path, p); }
+        else { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(conAlfa(0xFFF4F4F8, alfa)); cv.drawPath(path, p); p.setStyle(Paint.Style.FILL); }
+    }
+
+    // ----- Vistas: barras que bailan por instrumento + boton EQ -----
+    private void vistas(Canvas cv, float cx, float cy, long t, int alfa) {
+        float l = cx - 170, tp = cy - 110, rr = cx + 170, b = cy + 110;
+        tarjeta(cv, l, tp, rr, b, alfa);
+        String[] nombres = { "Barras", "Disco", "Letras" };
+        int v = (int) ((t / 2600) % 3);
+        pt.setTextAlign(Paint.Align.LEFT); pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(12); pt.setColor(conAlfa(AMBAR, alfa));
+        cv.drawText("◉ VISTA: " + nombres[v].toUpperCase(), l + 18, tp + 28, pt);
+        zona(l, tp, rr, b - 50, "vista");
+        float zx = l + 18, zy = tp + 44, zw = rr - l - 36, zh = 110;
+        if (v == 0) {
+            int nb = 14; float bw = zw / nb;
+            for (int i = 0; i < nb; i++) {
+                double f = 0.5 + 0.5 * Math.sin(t / (140.0 + i * 23) + i * 1.7) * Math.cos(t / 900.0 + i);
+                float h = (float) (12 + (zh - 12) * Math.abs(f));
+                p.setColor(conAlfa(i < 4 ? 0xFFD0601A : (i < 10 ? AMBAR : 0xFFFFD27A), alfa));
+                r.set(zx + i * bw + 2, zy + zh - h, zx + (i + 1) * bw - 2, zy + zh); cv.drawRoundRect(r, 3, 3, p);
+            }
+        } else if (v == 1) {
+            float dx = zx + zw / 2, dy = zy + zh / 2;
+            p.setColor(conAlfa(0xFF0A0A0A, alfa)); cv.drawCircle(dx, dy, 52, p);
+            cv.save(); cv.rotate(t / 1000f * 150f, dx, dy);
+            p.setColor(conAlfa(AMBAR, alfa)); cv.drawCircle(dx, dy, 22, p);
+            p.setColor(conAlfa(0xFFD0601A, alfa)); r.set(dx - 22, dy - 22, dx + 22, dy + 22); cv.drawArc(r, 0, 180, true, p);
+            cv.restore();
+            p.setColor(conAlfa(0xFF08080C, alfa)); cv.drawCircle(dx, dy, 4, p);
+        } else {
+            String[] lin = { "Y bailamos", "toda la noche", "en la carretera" };
+            int k = (int) ((t / 800) % 3);
+            pt.setTextAlign(Paint.Align.CENTER);
+            for (int i = 0; i < 3; i++) {
+                pt.setTypeface(i == k ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT); pt.setTextSize(i == k ? 20 : 15);
+                pt.setColor(conAlfa(i == k ? 0xFFF4F4F8 : 0xFF6A6A78, alfa));
+                cv.drawText(lin[i], zx + zw / 2, zy + 28 + i * 36, pt);
+            }
+        }
+        // botones Vista y EQ
+        float by = b - 34;
+        p.setColor(conAlfa(0xFF262633, alfa)); r.set(l + 18, by - 16, l + 128, by + 16); cv.drawRoundRect(r, 10, 10, p);
+        pt.setTextAlign(Paint.Align.CENTER); pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(13); pt.setColor(conAlfa(0xFFF4F4F8, alfa));
+        cv.drawText("◉ Vista", l + 73, by + 5, pt);
+        zona(l + 18, by - 16, l + 128, by + 16, "vista");
+        p.setColor(conAlfa(0xFF262633, alfa)); r.set(rr - 98, by - 16, rr - 18, by + 16); cv.drawRoundRect(r, 10, 10, p);
+        cv.drawText("EQ", rr - 58, by + 5, pt);
+        zona(rr - 98, by - 16, rr - 18, by + 16, "eq");
+        toque(cv, l + 73, by + 4, t, alfa);
+    }
+
+    // ----- Caratulas que bajan solas -----
+    private void caratulas(Canvas cv, float cx, float cy, long t, int alfa) {
+        float l = cx - 170, tp = cy - 100, rr = cx + 170, b = cy + 100;
+        tarjeta(cv, l, tp, rr, b, alfa);
+        zona(l, tp, rr, b, "caratulas");
+        int[][] cols = { { 0xFFD0601A, 0xFFFFB020 }, { 0xFF2E6FD0, 0xFF7AC0FF }, { 0xFF8A2ED0, 0xFFE07AFF } };
+        float w = 86, gap = (rr - l - 3 * w) / 4f;
+        long c = t % 5200;
+        for (int i = 0; i < 3; i++) {
+            float x0 = l + gap + i * (w + gap), y0 = tp + 22;
+            float f = Math.max(0f, Math.min(1f, (c - 400 - i * 700) / 500f));
+            p.setColor(conAlfa(0xFF0D0D14, alfa)); r.set(x0, y0, x0 + w, y0 + w); cv.drawRoundRect(r, 10, 10, p);
+            if (f > 0) {
+                int a2 = (int) (alfa * f);
+                p.setColor(conAlfa(cols[i][0], a2)); r.set(x0, y0, x0 + w, y0 + w); cv.drawRoundRect(r, 10, 10, p);
+                p.setColor(conAlfa(cols[i][1], a2)); cv.drawCircle(x0 + w / 2, y0 + w / 2, 24 * f, p);
+                p.setColor(conAlfa(0xFF1A1A1A, a2)); cv.drawCircle(x0 + w / 2, y0 + w / 2, 5, p);
+            } else {
+                // flecha de descarga
+                p.setColor(conAlfa(0xFF3A3A48, alfa)); float ax = x0 + w / 2, ay = y0 + w / 2;
+                cv.drawRect(ax - 3, ay - 16, ax + 3, ay + 2, p);
+                path.reset(); path.moveTo(ax - 11, ay); path.lineTo(ax + 11, ay); path.lineTo(ax, ay + 12); path.close(); cv.drawPath(path, p);
+            }
+        }
+        // barra de descarga
+        float prog = Math.min(1f, c / 2900f);
+        float py = tp + 136;
+        p.setColor(conAlfa(0xFF2A2A36, alfa)); r.set(l + 22, py, rr - 22, py + 6); cv.drawRoundRect(r, 3, 3, p);
+        p.setColor(conAlfa(AMBAR, alfa)); r.set(l + 22, py, l + 22 + (rr - l - 44) * prog, py + 6); cv.drawRoundRect(r, 3, 3, p);
+        pt.setTextAlign(Paint.Align.CENTER); pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(13);
+        pt.setColor(conAlfa(prog >= 1f ? 0xFF4ECB7A : 0xFFB8B8C6, alfa));
+        cv.drawText(prog >= 1f ? "3 carátulas nuevas" : "Descargando carátulas…", cx, py + 32, pt);
     }
 
     private void listo(Canvas cv, float cx, float cy, long t, int alfa) {
