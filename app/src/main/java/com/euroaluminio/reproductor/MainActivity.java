@@ -2433,7 +2433,6 @@ public class MainActivity extends Activity {
     }
     private void mostrarLista(boolean ver) { mostrarPane(ver ? 1 : 0); }
 
-    @Override
     // ===== GUIA DE INICIO (pantalla animada con los pasos para configurar) =====
     private GuiaView guia = null;
     private void mostrarGuia() {
@@ -2460,6 +2459,7 @@ public class MainActivity extends Activity {
         } catch (Throwable e) { try { ((android.view.ViewGroup) g.getParent()).removeView(g); } catch (Throwable e2) {} }
         try { mostrarPane(0); } catch (Throwable e) {}
     }
+    @Override
     public void onBackPressed() {
         if (guia != null) { cerrarGuia(); return; }
         View pv = findViewById(R.id.paneVideo);
