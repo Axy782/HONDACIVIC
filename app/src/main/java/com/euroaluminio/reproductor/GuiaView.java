@@ -11,12 +11,14 @@ import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.view.MotionEvent;
 import android.view.View;
+import java.util.ArrayList;
 
 // Guia de inicio animada (se ve como un video): 5 pasos que avanzan solos.
+// Corre sola como un video (con boton de pausa) y cada cosa dibujada se puede tocar para hacerla de verdad.
 // Todo se dibuja a mano (sin imagenes ni video) para que sea liviana en el radio.
 public class GuiaView extends View {
 
-    public interface Fin { void terminada(); }
+    public interface Fin { void terminada(); String accion(String que); }   // accion devuelve el texto que se muestra
 
     private static final float VW = 800f, VH = 480f;      // pantalla virtual (se escala al radio)
     private static final int PASOS = 5;
@@ -27,6 +29,14 @@ public class GuiaView extends View {
     private int paso = 0;
     private long inicioPaso = System.currentTimeMillis();
     private long pausaHasta = 0;
+    private boolean pausado = false;          // pausa del "video" (boton play/pausa)
+    private long ultimo = System.currentTimeMillis();
+    private long inicioAnim = System.currentTimeMillis();
+    private final ArrayList<RectF> hitR = new ArrayList<RectF>();
+    private final ArrayList<String> hitA = new ArrayList<String>();
+    private final RectF btnPlay = new RectF();
+    private String aviso = null; private long avisoDesde = 0;
+    private String modoReal = null, repReal = null; private boolean tocoAlgo = false;
     private float sc = 1f, ox = 0f, oy = 0f;
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -77,26 +87,54 @@ public class GuiaView extends View {
         if (nuevo < 0) nuevo = 0;
         if (nuevo >= PASOS) { terminar(); return; }
         paso = nuevo;
-        inicioPaso = System.currentTimeMillis();
+        inicioPaso = System.currentTimeMillis(); inicioAnim = inicioPaso;
+        aviso = null; tocoAlgo = false;
         invalidate();
     }
     private void terminar() { try { if (fin != null) fin.terminada(); } catch (Throwable e) {} }
 
+    // mensaje real que manda la app (ej. "USB: 230 canciones")
+    public void aviso(String s) { if (s == null) return; aviso = s; avisoDesde = System.currentTimeMillis(); postInvalidate(); }
+
+    private void hacer(String que) {
+        tocoAlgo = true;
+        pausaHasta = System.currentTimeMillis() + ("wifi".equals(que) ? 12000 : 7000);   // da tiempo de ver el resultado
+        String res = null;
+        try { if (fin != null) res = fin.accion(que); } catch (Throwable e) {}
+        if (res == null) return;
+        if ("modo".equals(que)) modoReal = res;
+        else if ("repetir".equals(que)) repReal = res;
+        aviso(res);
+    }
+    private void zona(float l, float t, float rr, float b, String que) { hitR.add(new RectF(l, t, rr, b)); hitA.add(que); }
+
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (e.getAction() != MotionEvent.ACTION_UP) return true;
         float x = (e.getX() - ox) / sc, y = (e.getY() - oy) / sc;
-        if (btnSig.contains(x, y)) { if (paso == PASOS - 1) terminar(); else ir(paso + 1); }
-        else if (paso > 0 && btnAtras.contains(x, y)) ir(paso - 1);
-        else if (paso < PASOS - 1 && btnSaltar.contains(x, y)) terminar();
-        else pausaHasta = System.currentTimeMillis() + 6000;   // tocar la pantalla da mas tiempo para leer
+        if (btnSig.contains(x, y)) { if (paso == PASOS - 1) { hacer("escuchar"); terminar(); } else ir(paso + 1); return true; }
+        if (paso > 0 && btnAtras.contains(x, y)) { ir(paso - 1); return true; }
+        if (paso < PASOS - 1 && btnSaltar.contains(x, y)) { terminar(); return true; }
+        if (btnPlay.contains(x, y)) { pausado = !pausado; pausaHasta = 0; invalidate(); return true; }
+        for (int i = hitR.size() - 1; i >= 0; i--) {
+            RectF h = hitR.get(i);
+            if (x >= h.left - 10 && x <= h.right + 10 && y >= h.top - 10 && y <= h.bottom + 10) {
+                String que = hitA.get(i);
+                if ("escuchar".equals(que)) { hacer(que); terminar(); } else hacer(que);
+                return true;
+            }
+        }
+        pausaHasta = System.currentTimeMillis() + 6000;   // tocar la pantalla da mas tiempo para leer
         return true;
     }
 
     @Override protected void onDraw(Canvas cv) {
         long now = System.currentTimeMillis();
         // pausa al tocar: el tiempo no corre
-        if (pausaHasta > now) inicioPaso += 33;
+        long dt = Math.max(0, Math.min(200, now - ultimo)); ultimo = now;
+        if (pausado || pausaHasta > now) inicioPaso += dt;   // el avance se detiene, la animacion sigue
         long t = now - inicioPaso;
+        long ta = now - inicioAnim;                           // tiempo de animacion (nunca se congela)
+        hitR.clear(); hitA.clear();
         if (paso < PASOS - 1 && t >= DUR) { ir(paso + 1); t = 0; }
         float avance = Math.min(1f, t / (float) DUR);
 
@@ -123,7 +161,7 @@ public class GuiaView extends View {
         } else btnSaltar.setEmpty();
 
         // entrada suave del contenido
-        float e = Math.min(1f, t / 400f);
+        float e = Math.min(1f, ta / 400f);
         e = 1f - (1f - e) * (1f - e);
         int alfa = (int) (255 * e);
         cv.save();
@@ -132,8 +170,9 @@ public class GuiaView extends View {
         cv.restore();
         cv.save();
         cv.translate(-30 * (1f - e), 0);
-        dibujarIlustracion(cv, t, alfa);
+        dibujarIlustracion(cv, ta, alfa);
         cv.restore();
+        dibujarAviso(cv, now, alfa);
 
         // botones
         String sig = paso == 0 ? "Empezar" : (paso == PASOS - 1 ? "Empezar a escuchar" : "Siguiente");
@@ -152,6 +191,19 @@ public class GuiaView extends View {
             cv.drawText("‹ Atrás", 48, 436, pt);
             btnAtras.set(30, 400, 170, 460);
         } else btnAtras.setEmpty();
+
+        // boton play / pausa del "video"
+        float pcx = VW / 2f, pcy = 429;
+        btnPlay.set(pcx - 30, pcy - 30, pcx + 30, pcy + 30);
+        p.setColor(0xFF1C1C26); cv.drawCircle(pcx, pcy, 24, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(0x99FFB020); cv.drawCircle(pcx, pcy, 24, p); p.setStyle(Paint.Style.FILL);
+        p.setColor(AMBAR);
+        if (pausado) { path.reset(); path.moveTo(pcx - 7, pcy - 11); path.lineTo(pcx + 11, pcy); path.lineTo(pcx - 7, pcy + 11); path.close(); cv.drawPath(path, p); }
+        else { cv.drawRect(pcx - 8, pcy - 10, pcx - 3, pcy + 10, p); cv.drawRect(pcx + 3, pcy - 10, pcx + 8, pcy + 10, p); }
+        if (pausado) {
+            pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(12); pt.setTextAlign(Paint.Align.CENTER); pt.setColor(0xFF8B8B9A);
+            cv.drawText("EN PAUSA", pcx, pcy + 42, pt);
+        }
 
         cv.restore();
         postInvalidateDelayed(33);   // ~30 cuadros por segundo
@@ -219,6 +271,28 @@ public class GuiaView extends View {
 
     private static int conAlfa(int c, int a) { return Color.argb((Color.alpha(c) * a) / 255, Color.red(c), Color.green(c), Color.blue(c)); }
 
+    // pastilla con el resultado real, o la pista "Toca para probar"
+    private void dibujarAviso(Canvas cv, long now, int alfa) {
+        float cx = 600, y = 384;
+        pt.setTextAlign(Paint.Align.CENTER);
+        if (aviso != null && now - avisoDesde < 6000) {
+            float a = Math.min(1f, (now - avisoDesde) / 250f);
+            float fade = now - avisoDesde > 5400 ? (6000 - (now - avisoDesde)) / 600f : 1f;
+            int al = (int) (alfa * a * fade);
+            pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(15);
+            float w = pt.measureText(aviso) + 48;
+            p.setColor(Color.argb((int) (al * 0.95f), 22, 52, 34)); r.set(cx - w / 2, y - 22, cx + w / 2, y + 12); cv.drawRoundRect(r, 17, 17, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.5f); p.setColor(Color.argb(al, 78, 203, 122)); cv.drawRoundRect(r, 17, 17, p); p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.argb(al, 78, 203, 122)); cv.drawCircle(cx - w / 2 + 18, y - 5, 4, p);
+            pt.setColor(Color.argb(al, 220, 255, 230)); cv.drawText(aviso, cx + 6, y, pt);
+        } else if (!hitR.isEmpty() && paso > 0 && paso < PASOS - 1) {
+            float lat = (float) (Math.sin(now / 400.0) * 0.5 + 0.5);
+            pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(13);
+            pt.setColor(Color.argb((int) (alfa * (0.55f + 0.45f * lat)), 255, 176, 32));
+            cv.drawText("TOCA PARA PROBARLO DE VERDAD", cx, y, pt);
+        }
+    }
+
     // ---------------- ilustraciones animadas ----------------
     private void dibujarIlustracion(Canvas cv, long t, int alfa) {
         float cx = 600, cy = 228;
@@ -247,6 +321,7 @@ public class GuiaView extends View {
 
     private void disco(Canvas cv, float cx, float cy, long t, int alfa) {
         float R = 140;
+        zona(cx - R, cy - R, cx + R, cy + R, "play");
         p.setColor(conAlfa(0xFF0A0A0A, alfa)); cv.drawCircle(cx, cy, R, p);
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1);
         for (float rr = 70; rr < R - 8; rr += 7) { p.setColor(conAlfa(0x14FFFFFF, alfa)); cv.drawCircle(cx, cy, rr, p); }
@@ -283,6 +358,8 @@ public class GuiaView extends View {
         p.setStyle(Paint.Style.STROKE); p.setColor(conAlfa(0x66FFB020, alfa)); cv.drawRoundRect(r, 10, 10, p); p.setStyle(Paint.Style.FILL);
         pt.setTypeface(Typeface.DEFAULT_BOLD); pt.setTextSize(14); pt.setTextAlign(Paint.Align.CENTER); pt.setColor(conAlfa(AMBAR, alfa));
         cv.drawText("Elegir carpeta", cx, tp + 116, pt);
+        zona(l + 20, tp + 92, rr - 20, tp + 130, "carpeta");
+        zona(l + 14, tp + 138, rr - 14, tp + 196, "usb");
         // boton principal que "se presiona"
         float ciclo = (t % 1600) / 1600f;
         boolean apretado = ciclo < 0.18f;
@@ -294,7 +371,7 @@ public class GuiaView extends View {
         pt.setColor(conAlfa(0xFF1A1A1A, alfa)); pt.setTextSize(15);
         cv.drawText("Detectar música del USB", cx, tp + 172, pt);
         // resultado que aparece despues del toque
-        if (t > 1800) {
+        if (t > 1800 && !tocoAlgo) {
             int a2 = (int) (alfa * Math.min(1f, (t - 1800) / 500f));
             pt.setTypeface(Typeface.DEFAULT); pt.setTextSize(13); pt.setColor(Color.argb(a2, 78, 203, 122));
             cv.drawText("Listo: música del USB cargada", cx, tp + 216, pt);
@@ -312,14 +389,21 @@ public class GuiaView extends View {
         float lat = (float) (Math.sin(t / 300.0) * 0.5 + 0.5);
         p.setColor(Color.argb((int) (alfa * (0.25f + 0.35f * lat)), 255, 176, 32)); r.set(bx - 4, cy - 22, bx + w1 + 4, cy + 22); cv.drawRoundRect(r, 12, 12, p);
         p.setColor(conAlfa(0xFF2E2614, alfa)); r.set(bx, cy - 18, bx + w1, cy + 18); cv.drawRoundRect(r, 10, 10, p);
-        pt.setColor(conAlfa(AMBAR, alfa)); cv.drawText(modos[m], bx + w1 / 2, cy + 5, pt);
+        pt.setColor(conAlfa(AMBAR, alfa)); cv.drawText(modoReal != null ? modoReal : modos[m], bx + w1 / 2, cy + 5, pt);
+        zona(bx, cy - 22, bx + w1, cy + 22, "modo");
         float px = bx + w1 + 70;
         p.setColor(conAlfa(0xFFF4F4F8, alfa));
         tri(cv, px - 46, cy, -1); tri(cv, px + 46, cy, 1);
         p.setColor(conAlfa(AMBAR, alfa)); cv.drawCircle(px, cy, 26, p);
+        zona(px - 28, cy - 28, px + 28, cy + 28, "play");
+        zona(px - 58, cy - 20, px - 34, cy + 20, "anterior");
+        zona(px + 34, cy - 20, px + 58, cy + 20, "siguiente");
         p.setColor(conAlfa(0xFF1A1A1A, alfa)); cv.drawRect(px - 9, cy - 10, px - 3, cy + 10, p); cv.drawRect(px + 3, cy - 10, px + 9, cy + 10, p);
         p.setColor(conAlfa(0xFF262633, alfa)); r.set(rr - 66, cy - 18, rr - 12, cy + 18); cv.drawRoundRect(r, 10, 10, p);
-        pt.setColor(conAlfa(0xFFF4F4F8, alfa)); cv.drawText("Sigue", rr - 39, cy + 5, pt);
+        boolean rep1 = "Repite 1".equals(repReal);
+        pt.setColor(conAlfa(rep1 ? AMBAR : 0xFFF4F4F8, alfa)); pt.setTextSize(rep1 ? 11 : 13);
+        cv.drawText(repReal != null ? repReal : "Sigue", rr - 39, cy + 5, pt); pt.setTextSize(13);
+        zona(rr - 66, cy - 18, rr - 12, cy + 18, "repetir");
         toque(cv, bx + w1 / 2, cy + 26, t, alfa);
     }
     private void tri(Canvas cv, float x, float y, int dir) {
@@ -332,6 +416,7 @@ public class GuiaView extends View {
     private void radioCelular(Canvas cv, float cx, float cy, long t, int alfa) {
         // radio con QR
         float l = cx - 180, tp = cy - 60;
+        zona(l, tp, l + 180, tp + 112, "wifi");
         p.setColor(conAlfa(0xFF1C1C26, alfa)); r.set(l, tp, l + 180, tp + 112); cv.drawRoundRect(r, 12, 12, p);
         p.setColor(conAlfa(0xFF0D0D14, alfa)); r.set(l + 12, tp + 12, l + 168, tp + 100); cv.drawRoundRect(r, 6, 6, p);
         float qx = l + 58, qy = tp + 24;
@@ -352,6 +437,7 @@ public class GuiaView extends View {
         p.setStyle(Paint.Style.FILL);
         // celular
         float fx = cx + 92, fy = cy - 80;
+        zona(fx, fy, fx + 74, fy + 144, "wifi");
         p.setColor(conAlfa(0xFF1C1C26, alfa)); r.set(fx, fy, fx + 74, fy + 144); cv.drawRoundRect(r, 12, 12, p);
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(conAlfa(AMBAR, alfa)); cv.drawRoundRect(r, 12, 12, p); p.setStyle(Paint.Style.FILL);
         p.setColor(conAlfa(0xFF0D0D14, alfa)); r.set(fx + 8, fy + 14, fx + 66, fy + 122); cv.drawRoundRect(r, 4, 4, p);
@@ -365,6 +451,7 @@ public class GuiaView extends View {
 
     private void listo(Canvas cv, float cx, float cy, long t, int alfa) {
         float R = 96;
+        zona(cx - R, cy - R, cx + R, cy + R, "escuchar");
         p.setColor(conAlfa(0xFF2E2614, alfa)); cv.drawCircle(cx, cy, R, p);
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(5); p.setColor(conAlfa(AMBAR, alfa));
         float aro = Math.min(1f, t / 700f);

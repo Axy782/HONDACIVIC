@@ -2438,11 +2438,57 @@ public class MainActivity extends Activity {
     private void mostrarGuia() {
         if (guia != null) return;
         try {
-            guia = new GuiaView(this, new GuiaView.Fin() { public void terminada() { cerrarGuia(); } });
+            guia = new GuiaView(this, new GuiaView.Fin() {
+                public void terminada() { cerrarGuia(); }
+                public String accion(String que) { return accionGuia(que); }
+            });
             android.view.ViewGroup raiz = (android.view.ViewGroup) findViewById(android.R.id.content);
             raiz.addView(guia, new android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
             android.view.animation.AlphaAnimation a = new android.view.animation.AlphaAnimation(0f, 1f); a.setDuration(400); guia.startAnimation(a);
         } catch (Throwable e) { guia = null; }
+    }
+    // lo que pasa al tocar cada cosa dentro de la guia: hace la funcion de verdad
+    private String accionGuia(String que) {
+        try {
+            if ("play".equals(que)) {
+                if (songs.isEmpty() && mp == null) return "Primero carga la música del USB";
+                boolean antes = mp != null && prepared && mp.isPlaying();
+                toggle();
+                return antes ? "En pausa" : "Sonando";
+            }
+            if ("siguiente".equals(que)) { siguiente(false); return "Siguiente canción"; }
+            if ("anterior".equals(que)) { anterior(); return "Canción anterior"; }
+            if ("modo".equals(que)) {
+                ciclarAleatorio();
+                return modoAleat == 2 ? "Aleat. todo USB" : modoAleat == 1 ? "Aleat. carpeta" : "En orden";
+            }
+            if ("repetir".equals(que)) {
+                repeat = (repeat == 1) ? 0 : 1; pintarRepeat();
+                return repeat == 1 ? "Repite 1" : "Sigue";
+            }
+            if ("usb".equals(que)) {
+                detectarYEnfocarUsb();
+                handler.postDelayed(new Runnable(){ public void run(){
+                    try {
+                        if (guia == null) return;
+                        int n = totalCanciones();
+                        guia.aviso(n > 0 ? "Listo: " + n + " canciones en el USB" : "No encontré música en el USB");
+                    } catch (Throwable e) {}
+                }}, 3500);
+                return "Buscando música en el USB…";
+            }
+            if ("carpeta".equals(que)) {
+                cerrarGuia();
+                handler.postDelayed(new Runnable(){ public void run(){ try { abrirExplorador(); } catch (Throwable e) {} }}, 350);
+                return null;
+            }
+            if ("wifi".equals(que)) { alternarServidorWifi(); return "Control del celular encendido"; }
+            if ("escuchar".equals(que)) {
+                if (!(mp != null && prepared && mp.isPlaying())) toggle();
+                return null;
+            }
+        } catch (Throwable e) { return "No se pudo hacer ahora"; }
+        return null;
     }
     private void cerrarGuia() {
         try { prefs.edit().putBoolean("guiaVista", true).apply(); } catch (Throwable e) {}   // ya no vuelve a salir sola
