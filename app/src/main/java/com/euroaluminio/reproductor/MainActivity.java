@@ -1707,7 +1707,15 @@ public class MainActivity extends Activity {
                     if (c != null) { try { bmp = decodeEscalado(c, 512); } catch (Exception e) {} }
                 }
                 final Bitmap portada = bmp;
-                final Bitmap fondo = (bmp != null) ? desenfocar(bmp, 60, 7) : null;
+                // como en el HTML: si no tiene caratula se inventa una de colores, y el fondo toma el color de la caratula
+                Bitmap verTmp = bmp, fondoTmp = null;
+                try {
+                    if (verTmp == null) verTmp = caratulaGenerada(s, 480);
+                    int colF = (bmp != null) ? colorDominante(bmp) : paletaDe(s)[0];
+                    fondoTmp = fondoDeColor(colF);
+                } catch (Throwable e) {}
+                final Bitmap ver = verTmp;
+                final Bitmap fondo = fondoTmp;
                 runOnUiThread(new Runnable() {
                     public void run() {
                         // Si el usuario ya cambió de canción, no aplicar (evita parpadeo y pintar la carátula equivocada)
@@ -1724,19 +1732,15 @@ public class MainActivity extends Activity {
                             discoBmpCache = null; discoCacheKey = null;
                             rearmarDisco();
                         }
-                        if (portada != null) {
-                            imgArt.setImageBitmap(portada);
+                        if (ver != null) {
+                            imgArt.setImageBitmap(ver);
                             if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
                             try {
-                                Bitmap fbg = (fondo != null) ? fondo : Bitmap.createScaledBitmap(portada, 20, 20, true);
-                                imgArtBg.setImageBitmap(fbg);
-                                imgArtBg.setBackgroundColor(0xFF06060A);
-                                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix(); cm.setSaturation(1.5f);
-                                android.graphics.ColorMatrix osc = new android.graphics.ColorMatrix(); osc.setScale(0.72f, 0.72f, 0.72f, 1f);
-                                cm.postConcat(osc);
-                                imgArtBg.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
-                            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
-                            artScrim.setVisibility(View.VISIBLE);
+                                imgArtBg.setColorFilter(null);
+                                imgArtBg.setBackgroundColor(0xFF0D0D14);
+                                if (fondo != null) imgArtBg.setImageBitmap(fondo); else imgArtBg.setImageDrawable(null);
+                            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF0D0D14); }
+                            artScrim.setVisibility(View.GONE);
                         } else {
                             imgArt.setImageDrawable(new ColorDrawable(0x00000000));
                             imgArtBg.setImageDrawable(null); imgArtBg.setColorFilter(null); imgArtBg.setBackgroundColor(0xFF000000);
@@ -1749,6 +1753,82 @@ public class MainActivity extends Activity {
             }
         }).start();
     }
+    // ===== colores como en la version HTML =====
+    private static final int[][] PALETA = {
+        { 0xFFD0601A, 0xFFFFB020 }, { 0xFF2E6FD0, 0xFF7AC0FF }, { 0xFF8A2ED0, 0xFFE07AFF },
+        { 0xFF1F9A5A, 0xFF7EE0A8 }, { 0xFFC0304A, 0xFFFF8AA0 }, { 0xFFB08A10, 0xFFFFE27A } };
+    private int[] paletaDe(Song s) {
+        String k = (s == null) ? "" : ((s.artist != null ? s.artist : "") + "|" + (s.title != null ? s.title : ""));
+        return PALETA[(k.hashCode() & 0x7fffffff) % PALETA.length];
+    }
+    private static String carpetaDeRuta(String p) {
+        try { java.io.File f = new java.io.File(p).getParentFile(); return f != null ? f.getName() : ""; } catch (Throwable e) { return ""; }
+    }
+    // caratula inventada para canciones sin caratula: degradado, disco y el nombre del artista
+    private Bitmap caratulaGenerada(Song s, int S) {
+        int[] col = paletaDe(s);
+        Bitmap b = Bitmap.createBitmap(S, S, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        android.graphics.RectF r = new android.graphics.RectF(0, 0, S, S);
+        p.setShader(new android.graphics.LinearGradient(0, 0, S, S, col[0], 0xFF1A1A24, android.graphics.Shader.TileMode.CLAMP));
+        c.drawRoundRect(r, S * 0.04f, S * 0.04f, p);
+        p.setShader(null);
+        p.setColor((col[1] & 0x00FFFFFF) | 0xE6000000); c.drawCircle(S * 0.62f, S * 0.42f, S * 0.26f, p);
+        p.setColor(0x80000000); c.drawCircle(S * 0.62f, S * 0.42f, S * 0.05f, p);
+        String art = (s != null && s.artist != null && s.artist.length() > 0) ? s.artist : (s != null ? nombreDe(s) : "");
+        try { art = art.toUpperCase(); } catch (Throwable e) {}
+        p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); p.setColor(0xFFFFFFFF);
+        float sz = S * 0.075f; p.setTextSize(sz);
+        while (sz > S * 0.04f && p.measureText(art) > S * 0.84f) { sz -= 1f; p.setTextSize(sz); }
+        if (p.measureText(art) > S * 0.84f) { while (art.length() > 1 && p.measureText(art + "...") > S * 0.84f) art = art.substring(0, art.length() - 1); art += "..."; }
+        c.drawText(art, S * 0.08f, S * 0.86f, p);
+        p.setTypeface(android.graphics.Typeface.DEFAULT); p.setTextSize(S * 0.055f); p.setColor(0xB0FFFFFF);
+        String carp = (s != null) ? carpetaDeRuta(s.path) : "";
+        if (p.measureText(carp) > S * 0.84f) { while (carp.length() > 1 && p.measureText(carp + "...") > S * 0.84f) carp = carp.substring(0, carp.length() - 1); carp += "..."; }
+        c.drawText(carp, S * 0.08f, S * 0.935f, p);
+        return b;
+    }
+    // color principal (el mas vivo) de una caratula
+    private static int colorDominante(Bitmap src) {
+        try {
+            Bitmap m = Bitmap.createScaledBitmap(src, 24, 24, true);
+            double sx = 0, sy = 0, ws = 0, sSat = 0;
+            float[] hsv = new float[3];
+            for (int y = 0; y < 24; y++) for (int x = 0; x < 24; x++) {
+                int px = m.getPixel(x, y);
+                android.graphics.Color.colorToHSV(px, hsv);
+                double w = hsv[1] * hsv[1] * hsv[2];
+                double a = Math.toRadians(hsv[0]);
+                sx += Math.cos(a) * w; sy += Math.sin(a) * w; ws += w; sSat += hsv[1] * w;
+            }
+            if (m != src) m.recycle();
+            if (ws < 2.0) return 0xFF3A3A48;   // caratula gris / blanco y negro: fondo neutro
+            float h = (float) Math.toDegrees(Math.atan2(sy, sx)); if (h < 0) h += 360f;
+            float sat = (float) Math.max(0.55, Math.min(0.9, sSat / ws));
+            return android.graphics.Color.HSVToColor(new float[]{ h, sat, 0.85f });
+        } catch (Throwable e) { return 0xFF3A3A48; }
+    }
+    // fondo en degradado del color (como el HTML: color arriba a la derecha que se apaga en negro)
+    private static Bitmap fondoDeColor(int col) {
+        int w = 200, h = 120;
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(b);
+        c.drawColor(0xFF0D0D14);
+        int r = (int) (((col >> 16) & 255) * 0.53f + 0x0D * 0.47f), g = (int) (((col >> 8) & 255) * 0.53f + 0x0D * 0.47f), bl = (int) ((col & 255) * 0.53f + 0x14 * 0.47f);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.DITHER_FLAG);
+        p.setShader(new android.graphics.RadialGradient(w * 0.7f, h * 0.3f, w * 0.75f,
+            new int[]{ 0xFF000000 | (r << 16) | (g << 8) | bl, 0xFF0D0D14 }, new float[]{ 0f, 0.7f }, android.graphics.Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, p);
+        return b;
+    }
+    private final java.util.HashMap<String, Bitmap> miniGen = new java.util.HashMap<String, Bitmap>();
+    private Bitmap miniGenerada(String clave, Song s) {
+        Bitmap b = miniGen.get(clave);
+        if (b == null) { try { b = caratulaGenerada(s, 168); miniGen.put(clave, b); } catch (Throwable e) {} }
+        return b;
+    }
+
     // Animación de entrada de la carátula (deslizar + giro 3D)
     private void animarEntradaCaratula(int animDirLocal) {
         if (animDirLocal == 0) return;
@@ -4905,7 +4985,14 @@ public class MainActivity extends Activity {
                     synchronized (portadas) { bmp = portadas.get("l:" + n); }
                 }
                 if (bmp != null) th.setImageBitmap(bmp);
-                else th.setImageDrawable(new ColorDrawable(0xFF262633));
+                else {
+                    // sin caratula: una de colores inventada (como en el HTML)
+                    Song falsa = new Song(); 
+                    String clave = (tab == 0 ? "c:" + carpetas.get(i).name : "l:" + nombresListas.get(i));
+                    falsa.title = clave; falsa.artist = (tab == 0 ? carpetas.get(i).name : nombresListas.get(i)); falsa.path = "/" + (tab == 0 ? "Carpeta" : "Lista") + "/x";
+                    Bitmap g = miniGenerada(clave, falsa);
+                    if (g != null) th.setImageBitmap(g); else th.setImageDrawable(new ColorDrawable(0xFF262633));
+                }
             } else {
                 TextView t = (TextView) v.findViewById(R.id.rowTitle);
                 TextView a = (TextView) v.findViewById(R.id.rowArtist);
@@ -4914,17 +5001,31 @@ public class MainActivity extends Activity {
                     Song vid = videos.get(i);
                     t.setText(vid.title); a.setText("Video"); d.setText("");
                     t.setTextColor(0xFFF4F4F8);
+                    pintarIcoFila(v, 0xFF7AC0FF, "▶", false);
                 } else {
                     Song s = cancionesCarpeta.get(i);
                     t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
                     d.setText(s.dur > 0 ? fmt(s.dur) : "");
-                    t.setTextColor(rutaActualCache != null && rutaActualCache.equals(s.path) ? accent : 0xFFF4F4F8);
+                    boolean suena = rutaActualCache != null && rutaActualCache.equals(s.path);
+                    t.setTextColor(suena ? accent : 0xFFF4F4F8);
+                    String ini = ""; try { String tt = (s.title != null ? s.title.trim() : ""); if (tt.length() > 0) ini = tt.substring(0, 1).toUpperCase(); } catch (Throwable e) {}
+                    pintarIcoFila(v, suena ? accent : paletaDe(s)[1], suena ? "▶" : ini, suena);
                 }
             }
             return v;
         }
     }
 
+    private void pintarIcoFila(View fila, int color, String txt, boolean fuerte) {
+        try {
+            TextView ico = (TextView) fila.findViewById(R.id.rowIco);
+            if (ico == null) return;
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setColor(color); gd.setCornerRadius(8 * getResources().getDisplayMetrics().density);
+            ico.setBackgroundDrawable(gd);
+            ico.setText(txt);
+        } catch (Throwable e) {}
+    }
     // Portada de una lista de canciones (primera con carátula)
     private android.graphics.Bitmap portadaDe(ArrayList<Song> lista) {
         int lim = Math.min(lista.size(), 8);
