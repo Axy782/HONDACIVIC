@@ -686,7 +686,21 @@ public class MainActivity extends Activity {
         try { am.requestAudioFocus(focoListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN); } catch (Exception e) {}
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
     }
+    // volante: el radio a veces manda la misma tecla 2 veces (o repetida si se deja apretada).
+    // Se acepta una sola por toque: si llega otra igual en menos de 0.6 s, se ignora.
+    private long ultimaTeclaT = 0; private int ultimaTeclaGrupo = -1;
+    private static int grupoTecla(int code) {
+        switch (code) {
+            case KeyEvent.KEYCODE_MEDIA_NEXT: case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: return 1;
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS: case KeyEvent.KEYCODE_MEDIA_REWIND: return 2;
+            default: return 3;
+        }
+    }
     public void manejarTeclaMedia(int code) {
+        long ahora = android.os.SystemClock.uptimeMillis();
+        int g = grupoTecla(code);
+        if (g == ultimaTeclaGrupo && ahora - ultimaTeclaT < 600) return;   // toque doble del volante: se ignora
+        ultimaTeclaGrupo = g; ultimaTeclaT = ahora;
         switch (code) {
             case KeyEvent.KEYCODE_MEDIA_NEXT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
@@ -711,6 +725,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE: case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: case KeyEvent.KEYCODE_MEDIA_REWIND:
             case KeyEvent.KEYCODE_MEDIA_STOP:
+                if (e != null && e.getRepeatCount() > 0) return true;   // tecla dejada apretada: no saltar canciones
                 manejarTeclaMedia(keyCode); return true;
         }
         return super.onKeyDown(keyCode, e);
@@ -2175,6 +2190,10 @@ public class MainActivity extends Activity {
     private void cargarYReproducir() {
         if (posEnOrden < 0 || posEnOrden >= order.size()) return;
         final Song s = songs.get(order.get(posEnOrden));
+        try {
+            if (historial.isEmpty() || historial.get(historial.size() - 1) != s) historial.add(s);
+            while (historial.size() > 60) historial.remove(0);
+        } catch (Throwable e) {}
         prepared = false;
         detenerAnalizador();
         try {
@@ -2238,9 +2257,23 @@ public class MainActivity extends Activity {
         cargarYReproducir();
     }
 
+    // historial de lo que de verdad sono: "anterior" vuelve a ESA cancion (aunque este en aleatorio)
+    private final ArrayList<Song> historial = new ArrayList<Song>();
     private void anterior() {
         if (order.isEmpty()) return;
-        if (mp != null && prepared && mp.getCurrentPosition() > 3000) { mp.seekTo(0); return; }
+        // atras = la cancion que sono antes (siempre cambia de cancion, no reinicia la misma)
+        while (historial.size() >= 2) {
+            historial.remove(historial.size() - 1);                 // la que suena ahora
+            Song prev = historial.get(historial.size() - 1);
+            int ix = indiceEnLista(songs, prev);
+            int p = (ix >= 0) ? order.indexOf(ix) : -1;
+            if (p >= 0) {
+                historial.remove(historial.size() - 1);             // se vuelve a anotar al cargarla
+                posEnOrden = p; animDir = -1;
+                cargarYReproducir();
+                return;
+            }
+        }
         if (posEnOrden > 0) posEnOrden--; else posEnOrden = order.size() - 1;
         animDir = -1;
         cargarYReproducir();
