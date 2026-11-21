@@ -20,7 +20,13 @@ public class EqNombreView extends View {
     private final float[] h = new float[N];
     private final float[] target = new float[N];
     private final float[] pico = new float[N];
-    private final float[] vel = new float[N];    // velocidad de cada barra: rebote elastico (baila con "resorte")   // pico por banda: cada instrumento con su propia sensibilidad
+    private final float[] vel = new float[N];
+    // osciloscopio
+    private static final int PUNTOS = 90;
+    private final float[] grupo = new float[4];
+    private float fase = 0f;
+    private final android.graphics.Path onda = new android.graphics.Path();
+    private final Paint pLinea = new Paint(Paint.ANTI_ALIAS_FLAG);    // velocidad de cada barra: rebote elastico (baila con "resorte")   // pico por banda: cada instrumento con su propia sensibilidad
     private final Paint pText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pBar = new Paint(Paint.ANTI_ALIAS_FLAG);
     private long lastT = 0;
@@ -76,6 +82,7 @@ public class EqNombreView extends View {
     private void init() {
         pText.setTypeface(Typeface.DEFAULT_BOLD);
         pBar.setStyle(Paint.Style.FILL);
+        pLinea.setStyle(Paint.Style.STROKE); pLinea.setStrokeCap(Paint.Cap.ROUND); pLinea.setStrokeJoin(Paint.Join.ROUND);
     }
 
     public void setInfo(String art, String can) {
@@ -126,14 +133,11 @@ public class EqNombreView extends View {
         pText.setTextSize(szC);
         cv.drawText(uC, x, y + (int) (30 * sc), pText);
 
-        // línea + barras hacia ABAJO
-        float by = y + (int) (46 * sc);
+        // OSCILOSCOPIO: una linea brillante que vibra con el sonido, debajo del nombre
         float bx = x + 2;
         float bwidth = 190 * sc;
-        pBar.setColor(color);
-        cv.drawRect(bx, by, bx + bwidth, by + 2 * sc, pBar);
+        float cy0 = y + (int) (46 * sc) + 26 * sc;   // linea central (donde antes colgaban las barras)
         int nb = externo ? nVis : N;
-        float step = bwidth / nb;
 
         long now = System.currentTimeMillis();
         if (!tieneAudio && now - lastT > 60) {   // respaldo: si el radio no da FFT, animación por tiempo
@@ -143,18 +147,43 @@ public class EqNombreView extends View {
         if (!sonando) { for (int i = 0; i < N; i++) target[i] = 0.01f; }
         for (int i = 0; i < nb; i++) {
             if (externo) {
-                // resorte: la barra sigue el golpe, se pasa un poquito y rebota (mas viva, no robotica)
-                vel[i] += (target[i] - h[i]) * 0.28f;   // resorte suave: se estira con calma
+                // resorte: sigue el golpe, se pasa un poquito y rebota (mas viva, no robotica)
+                vel[i] += (target[i] - h[i]) * 0.28f;
                 vel[i] *= 0.6f;
                 h[i] += vel[i];
                 if (h[i] < 0f) { h[i] = 0f; vel[i] = 0f; }
                 if (h[i] > 1f) { h[i] = 1f; vel[i] = 0f; }
             }
-            else if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;   // sube ágil
-            else h[i] += (target[i] - h[i]) * 0.32f;                      // baja con cuerpo (natural, no seco)
-            float bh = h[i] * 60 * sc + 1.5f;                            // barras más altas
-            float ancho = externo ? step * 0.72f : step * 0.6f;          // con menos barras, mas anchas
-            cv.drawRect(bx + i * step, by, bx + i * step + ancho, by + bh, pBar);
+            else if (target[i] > h[i]) h[i] += (target[i] - h[i]) * 0.85f;
+            else h[i] += (target[i] - h[i]) * 0.32f;
+        }
+        // 4 grupos de sonido: graves (bombo), medios bajos (voz), medios altos, agudos (guira)
+        for (int g = 0; g < 4; g++) {
+            int lo = g * nb / 4, hi = (g + 1) * nb / 4; float m = 0f;
+            for (int i = lo; i < hi; i++) if (h[i] > m) m = h[i];
+            grupo[g] = m;
+        }
+        if (sonando) fase += 0.12f;
+        float amp = 16f * sc;
+        for (int capa = 1; capa >= 0; capa--) {
+            onda.reset();
+            float k = (capa == 1) ? 0.6f : 1f;
+            for (int sIdx = 0; sIdx <= PUNTOS; sIdx++) {
+                float xx = (float) sIdx / PUNTOS;
+                float yv = 0f;
+                for (int hm = 1; hm <= 4; hm++)
+                    yv += (float) Math.sin(xx * Math.PI * 2 * (hm * 2 + 1) + fase * hm + capa) * grupo[hm - 1] / hm;
+                yv *= (float) Math.sin(xx * Math.PI) * amp * k;
+                float px = bx + xx * bwidth, py = cy0 + yv;
+                if (sIdx == 0) onda.moveTo(px, py); else onda.lineTo(px, py);
+            }
+            if (capa == 1) {   // segunda linea: blanca transparente, mas bajita (da profundidad)
+                pLinea.setStrokeWidth(1.6f * sc); pLinea.setColor(0x70FFFFFF); cv.drawPath(onda, pLinea);
+            } else {           // linea principal: brillo (trazo ancho transparente) + linea nitida
+                pLinea.setStrokeWidth(7f * sc); pLinea.setColor((color & 0x00FFFFFF) | 0x33000000); cv.drawPath(onda, pLinea);
+                pLinea.setStrokeWidth(3.5f * sc); pLinea.setColor((color & 0x00FFFFFF) | 0x66000000); cv.drawPath(onda, pLinea);
+                pLinea.setStrokeWidth(2.2f * sc); pLinea.setColor(color); cv.drawPath(onda, pLinea);
+            }
         }
         // redibujo fluido (~30 cuadros) mientras suena, aunque el FFT llegue lento
         if (activo && sonando) postInvalidateDelayed(33);
