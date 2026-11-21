@@ -335,6 +335,7 @@ public class MainActivity extends Activity {
     private org.json.JSONObject itemCancion(int c, int i, Song s) throws Exception {
         org.json.JSONObject o = new org.json.JSONObject();
         o.put("c", c); o.put("s", i);
+        o.put("id", s.path != null ? Integer.toHexString(s.path.hashCode()) : "");   // para marcar en el celular la que suena
         o.put("t", s.title != null && s.title.length() > 0 ? s.title : nombreDe(s));
         o.put("a", s.artist != null && !s.artist.equals("Desconocido") ? s.artist : "");
         return o;
@@ -487,6 +488,7 @@ public class MainActivity extends Activity {
                             Song s = songPorRuta(l.optString(k));
                             org.json.JSONObject o = new org.json.JSONObject();
                             o.put("i", k);
+                            o.put("id", Integer.toHexString(l.optString(k).hashCode()));
                             if (s != null) { o.put("t", s.title != null && s.title.length() > 0 ? s.title : nombreDe(s)); o.put("a", s.artist != null && !s.artist.equals("Desconocido") ? s.artist : ""); }
                             else { String pth = l.optString(k); o.put("t", pth.substring(pth.lastIndexOf('/') + 1)); o.put("a", "(no está en el USB)"); }
                             arr.put(o);
@@ -687,7 +689,7 @@ public class MainActivity extends Activity {
         try { if (mbCn != null) am.registerMediaButtonEventReceiver(mbCn); } catch (Exception e) {}
     }
     // volante: el radio a veces manda la misma tecla 2 veces (o repetida si se deja apretada).
-    // Se acepta una sola por toque: si llega otra igual en menos de 0.6 s, se ignora.
+    // Se acepta una sola por toque: si llega otra igual en menos de 0.3 s, se ignora (el doble toque del usuario si cuenta).
     private long ultimaTeclaT = 0; private int ultimaTeclaGrupo = -1;
     private static int grupoTecla(int code) {
         switch (code) {
@@ -696,11 +698,47 @@ public class MainActivity extends Activity {
             default: return 3;
         }
     }
-    public void manejarTeclaMedia(int code) {
+    public void manejarTeclaMedia(int code) { manejarTeclaMedia(code, 0L, "?"); }
+    private TextView txtRegVolante = null;
+    private void mostrarRegistroVolante() {
+        try {
+            android.widget.LinearLayout sec = (android.widget.LinearLayout) findViewById(R.id.secReproduccion);
+            if (txtRegVolante == null) {
+                float d = getResources().getDisplayMetrics().density;
+                TextView t = new TextView(this);
+                t.setText("BOTONES DEL VOLANTE (últimos toques)"); t.setTextColor(accent); t.setTextSize(13); t.setTypeface(null, android.graphics.Typeface.BOLD);
+                t.setPadding(0, (int) (18 * d), 0, (int) (6 * d));
+                sec.addView(t);
+                txtRegVolante = new TextView(this);
+                txtRegVolante.setTextColor(0xFFB8B8C6); txtRegVolante.setTextSize(12); txtRegVolante.setTypeface(android.graphics.Typeface.MONOSPACE);
+                txtRegVolante.setBackgroundColor(0xFF1C1C26); txtRegVolante.setPadding((int) (12 * d), (int) (10 * d), (int) (12 * d), (int) (10 * d));
+                sec.addView(txtRegVolante);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (String l : registroVolante) sb.append(l).append('\n');
+            txtRegVolante.setText(sb.length() > 0 ? sb.toString().trim() : "Toca siguiente o anterior en el volante y vuelve aquí: se ve cada señal que manda el radio.");
+        } catch (Throwable e) {}
+    }
+    // downTime = momento en que se apreto el boton. Si la MISMA apretada llega dos veces
+    // (por la pantalla y por el aviso del sistema), trae el mismo downTime: la copia se ignora.
+    private long ultimoDown = -1;
+    private final java.util.ArrayList<String> registroVolante = new java.util.ArrayList<String>();
+    private void anotarVolante(int code, String origen, String que) {
+        try {
+            String n = code == KeyEvent.KEYCODE_MEDIA_NEXT ? "SIGUIENTE" : code == KeyEvent.KEYCODE_MEDIA_PREVIOUS ? "ANTERIOR"
+                : code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ? "ADELANTAR" : code == KeyEvent.KEYCODE_MEDIA_REWIND ? "RETROCEDER" : ("tecla " + code);
+            String h = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(new java.util.Date());
+            registroVolante.add(0, h + "  " + n + "  (" + origen + ")  " + que);
+            while (registroVolante.size() > 12) registroVolante.remove(registroVolante.size() - 1);
+        } catch (Throwable e) {}
+    }
+    public void manejarTeclaMedia(int code, long downTime, String origen) {
         long ahora = android.os.SystemClock.uptimeMillis();
         int g = grupoTecla(code);
-        if (g == ultimaTeclaGrupo && ahora - ultimaTeclaT < 600) return;   // toque doble del volante: se ignora
-        ultimaTeclaGrupo = g; ultimaTeclaT = ahora;
+        if (g == ultimaTeclaGrupo && downTime > 0 && downTime == ultimoDown) { anotarVolante(code, origen, "copia de la misma apretada: ignorada"); return; }
+        if (g == ultimaTeclaGrupo && ahora - ultimaTeclaT < 200) { anotarVolante(code, origen, "llego pegada (" + (ahora - ultimaTeclaT) + " ms): ignorada"); return; }
+        anotarVolante(code, origen, "OK" + (ultimaTeclaT > 0 && g == ultimaTeclaGrupo ? " (+" + (ahora - ultimaTeclaT) + " ms)" : ""));
+        ultimaTeclaGrupo = g; ultimaTeclaT = ahora; if (downTime > 0) ultimoDown = downTime;
         switch (code) {
             case KeyEvent.KEYCODE_MEDIA_NEXT:
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD:
@@ -726,7 +764,7 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: case KeyEvent.KEYCODE_MEDIA_REWIND:
             case KeyEvent.KEYCODE_MEDIA_STOP:
                 if (e != null && e.getRepeatCount() > 0) return true;   // tecla dejada apretada: no saltar canciones
-                manejarTeclaMedia(keyCode); return true;
+                manejarTeclaMedia(keyCode, e != null ? e.getDownTime() : 0L, "pantalla"); return true;
         }
         return super.onKeyDown(keyCode, e);
     }
@@ -914,7 +952,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.filaMusica).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secMusica, "Música"); }});
         findViewById(R.id.filaCaratulas).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secCaratulas, "Carátulas"); }});
         findViewById(R.id.filaApariencia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secApariencia, "Apariencia"); }});
-        findViewById(R.id.filaReproduccion).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secReproduccion, "Reproducción"); }});
+        findViewById(R.id.filaReproduccion).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secReproduccion, "Reproducción"); mostrarRegistroVolante(); }});
         findViewById(R.id.filaWifi).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ abrirSeccionAjustes(R.id.secWifi, "Celular por WiFi"); }});
         findViewById(R.id.filaGuia).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ mostrarGuia(); }});
         // GUIA DE INICIO: sale sola solo la primera vez
@@ -944,10 +982,20 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnBorrarActual).setOnClickListener(new View.OnClickListener(){ public void onClick(View v){ borrarCancionActual(); }});
         final GestureDetector gestos = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             public boolean onDown(MotionEvent e) { return true; }
+            long ultimoDeslizar = 0;
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
                 if (e1 == null || e2 == null) return false;
+                if (e1.getPointerCount() > 1 || e2.getPointerCount() > 1) return false;   // con dos dedos no cambia
+                float dens = getResources().getDisplayMetrics().density;
+                float ancho = imgArt.getWidth() > 0 ? imgArt.getWidth() : 600 * dens;
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
-                if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 90) {
+                long ahora = android.os.SystemClock.uptimeMillis();
+                // menos sensible: hay que deslizar de verdad (casi un tercio de la pantalla), derecho y con ganas
+                boolean largo = Math.abs(dx) > Math.max(160 * dens, ancho * 0.3f);
+                boolean derecho = Math.abs(dx) > Math.abs(dy) * 2.5f;
+                boolean rapido = Math.abs(vx) > 700 * dens;
+                if (largo && derecho && rapido && ahora - ultimoDeslizar > 900) {
+                    ultimoDeslizar = ahora;
                     if (dx > 0) anterior(); else siguiente(false);
                     return true;
                 }
@@ -970,6 +1018,7 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_UP:
                         if (longP != null) { handler.removeCallbacks(longP); longP = null; }
                         long ahora = System.currentTimeMillis();
+                        if (Math.abs(e.getX() - dx) > 30 || Math.abs(e.getY() - dy) > 30) { toques = 0; break; }   // fue un deslizamiento, no un toque
                         if (ahora - ultimoTap < 700) toques++; else toques = 1;
                         ultimoTap = ahora;
                         if (toques >= 4) { toques = 0; buscarCaratulaDirecto(); }  // 4 toques = buscar directo (sin teclado)
@@ -1707,15 +1756,7 @@ public class MainActivity extends Activity {
                     if (c != null) { try { bmp = decodeEscalado(c, 512); } catch (Exception e) {} }
                 }
                 final Bitmap portada = bmp;
-                // como en el HTML: si no tiene caratula se inventa una de colores, y el fondo toma el color de la caratula
-                Bitmap verTmp = bmp, fondoTmp = null;
-                try {
-                    if (verTmp == null) verTmp = caratulaGenerada(s, 480);
-                    int colF = (bmp != null) ? colorDominante(bmp) : paletaDe(s)[0];
-                    fondoTmp = fondoDeColor(colF);
-                } catch (Throwable e) {}
-                final Bitmap ver = verTmp;
-                final Bitmap fondo = fondoTmp;
+                final Bitmap fondo = (bmp != null) ? desenfocar(bmp, 60, 7) : null;
                 runOnUiThread(new Runnable() {
                     public void run() {
                         // Si el usuario ya cambió de canción, no aplicar (evita parpadeo y pintar la carátula equivocada)
@@ -1732,15 +1773,19 @@ public class MainActivity extends Activity {
                             discoBmpCache = null; discoCacheKey = null;
                             rearmarDisco();
                         }
-                        if (ver != null) {
-                            imgArt.setImageBitmap(ver);
+                        if (portada != null) {
+                            imgArt.setImageBitmap(portada);
                             if (txtNombreGrande != null) txtNombreGrande.setVisibility(View.GONE);
                             try {
-                                imgArtBg.setColorFilter(null);
-                                imgArtBg.setBackgroundColor(0xFF0D0D14);
-                                if (fondo != null) imgArtBg.setImageBitmap(fondo); else imgArtBg.setImageDrawable(null);
-                            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF0D0D14); }
-                            artScrim.setVisibility(View.GONE);
+                                Bitmap fbg = (fondo != null) ? fondo : Bitmap.createScaledBitmap(portada, 20, 20, true);
+                                imgArtBg.setImageBitmap(fbg);
+                                imgArtBg.setBackgroundColor(0xFF06060A);
+                                android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix(); cm.setSaturation(1.5f);
+                                android.graphics.ColorMatrix osc = new android.graphics.ColorMatrix(); osc.setScale(0.72f, 0.72f, 0.72f, 1f);
+                                cm.postConcat(osc);
+                                imgArtBg.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+                            } catch (Exception e) { imgArtBg.setImageDrawable(null); imgArtBg.setBackgroundColor(0xFF06060A); }
+                            artScrim.setVisibility(View.VISIBLE);
                         } else {
                             imgArt.setImageDrawable(new ColorDrawable(0x00000000));
                             imgArtBg.setImageDrawable(null); imgArtBg.setColorFilter(null); imgArtBg.setBackgroundColor(0xFF000000);
@@ -1753,82 +1798,6 @@ public class MainActivity extends Activity {
             }
         }).start();
     }
-    // ===== colores como en la version HTML =====
-    private static final int[][] PALETA = {
-        { 0xFFD0601A, 0xFFFFB020 }, { 0xFF2E6FD0, 0xFF7AC0FF }, { 0xFF8A2ED0, 0xFFE07AFF },
-        { 0xFF1F9A5A, 0xFF7EE0A8 }, { 0xFFC0304A, 0xFFFF8AA0 }, { 0xFFB08A10, 0xFFFFE27A } };
-    private int[] paletaDe(Song s) {
-        String k = (s == null) ? "" : ((s.artist != null ? s.artist : "") + "|" + (s.title != null ? s.title : ""));
-        return PALETA[(k.hashCode() & 0x7fffffff) % PALETA.length];
-    }
-    private static String carpetaDeRuta(String p) {
-        try { java.io.File f = new java.io.File(p).getParentFile(); return f != null ? f.getName() : ""; } catch (Throwable e) { return ""; }
-    }
-    // caratula inventada para canciones sin caratula: degradado, disco y el nombre del artista
-    private Bitmap caratulaGenerada(Song s, int S) {
-        int[] col = paletaDe(s);
-        Bitmap b = Bitmap.createBitmap(S, S, Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas c = new android.graphics.Canvas(b);
-        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-        android.graphics.RectF r = new android.graphics.RectF(0, 0, S, S);
-        p.setShader(new android.graphics.LinearGradient(0, 0, S, S, col[0], 0xFF1A1A24, android.graphics.Shader.TileMode.CLAMP));
-        c.drawRoundRect(r, S * 0.04f, S * 0.04f, p);
-        p.setShader(null);
-        p.setColor((col[1] & 0x00FFFFFF) | 0xE6000000); c.drawCircle(S * 0.62f, S * 0.42f, S * 0.26f, p);
-        p.setColor(0x80000000); c.drawCircle(S * 0.62f, S * 0.42f, S * 0.05f, p);
-        String art = (s != null && s.artist != null && s.artist.length() > 0) ? s.artist : (s != null ? nombreDe(s) : "");
-        try { art = art.toUpperCase(); } catch (Throwable e) {}
-        p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); p.setColor(0xFFFFFFFF);
-        float sz = S * 0.075f; p.setTextSize(sz);
-        while (sz > S * 0.04f && p.measureText(art) > S * 0.84f) { sz -= 1f; p.setTextSize(sz); }
-        if (p.measureText(art) > S * 0.84f) { while (art.length() > 1 && p.measureText(art + "...") > S * 0.84f) art = art.substring(0, art.length() - 1); art += "..."; }
-        c.drawText(art, S * 0.08f, S * 0.86f, p);
-        p.setTypeface(android.graphics.Typeface.DEFAULT); p.setTextSize(S * 0.055f); p.setColor(0xB0FFFFFF);
-        String carp = (s != null) ? carpetaDeRuta(s.path) : "";
-        if (p.measureText(carp) > S * 0.84f) { while (carp.length() > 1 && p.measureText(carp + "...") > S * 0.84f) carp = carp.substring(0, carp.length() - 1); carp += "..."; }
-        c.drawText(carp, S * 0.08f, S * 0.935f, p);
-        return b;
-    }
-    // color principal (el mas vivo) de una caratula
-    private static int colorDominante(Bitmap src) {
-        try {
-            Bitmap m = Bitmap.createScaledBitmap(src, 24, 24, true);
-            double sx = 0, sy = 0, ws = 0, sSat = 0;
-            float[] hsv = new float[3];
-            for (int y = 0; y < 24; y++) for (int x = 0; x < 24; x++) {
-                int px = m.getPixel(x, y);
-                android.graphics.Color.colorToHSV(px, hsv);
-                double w = hsv[1] * hsv[1] * hsv[2];
-                double a = Math.toRadians(hsv[0]);
-                sx += Math.cos(a) * w; sy += Math.sin(a) * w; ws += w; sSat += hsv[1] * w;
-            }
-            if (m != src) m.recycle();
-            if (ws < 2.0) return 0xFF3A3A48;   // caratula gris / blanco y negro: fondo neutro
-            float h = (float) Math.toDegrees(Math.atan2(sy, sx)); if (h < 0) h += 360f;
-            float sat = (float) Math.max(0.55, Math.min(0.9, sSat / ws));
-            return android.graphics.Color.HSVToColor(new float[]{ h, sat, 0.85f });
-        } catch (Throwable e) { return 0xFF3A3A48; }
-    }
-    // fondo en degradado del color (como el HTML: color arriba a la derecha que se apaga en negro)
-    private static Bitmap fondoDeColor(int col) {
-        int w = 200, h = 120;
-        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas c = new android.graphics.Canvas(b);
-        c.drawColor(0xFF0D0D14);
-        int r = (int) (((col >> 16) & 255) * 0.53f + 0x0D * 0.47f), g = (int) (((col >> 8) & 255) * 0.53f + 0x0D * 0.47f), bl = (int) ((col & 255) * 0.53f + 0x14 * 0.47f);
-        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.DITHER_FLAG);
-        p.setShader(new android.graphics.RadialGradient(w * 0.7f, h * 0.3f, w * 0.75f,
-            new int[]{ 0xFF000000 | (r << 16) | (g << 8) | bl, 0xFF0D0D14 }, new float[]{ 0f, 0.7f }, android.graphics.Shader.TileMode.CLAMP));
-        c.drawRect(0, 0, w, h, p);
-        return b;
-    }
-    private final java.util.HashMap<String, Bitmap> miniGen = new java.util.HashMap<String, Bitmap>();
-    private Bitmap miniGenerada(String clave, Song s) {
-        Bitmap b = miniGen.get(clave);
-        if (b == null) { try { b = caratulaGenerada(s, 168); miniGen.put(clave, b); } catch (Throwable e) {} }
-        return b;
-    }
-
     // Animación de entrada de la carátula (deslizar + giro 3D)
     private void animarEntradaCaratula(int animDirLocal) {
         if (animDirLocal == 0) return;
@@ -2275,6 +2244,8 @@ public class MainActivity extends Activity {
             while (historial.size() > 60) historial.remove(0);
         } catch (Throwable e) {}
         prepared = false;
+        cargaPendiente = false; handler.removeCallbacks(cargaDiferida);
+        final int miCarga = ++cargaN;     // cada carga tiene su numero: avisos viejos del reproductor se ignoran
         detenerAnalizador();
         try {
             if (mp != null) { mp.reset(); }
@@ -2285,6 +2256,8 @@ public class MainActivity extends Activity {
             mp.setDataSource(s.path);
             mp.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 public void onPrepared(MediaPlayer m) {
+                    if (miCarga != cargaN) return;   // llego tarde: ya se pidio otra cancion
+                    reintentoPos = -1;
                     prepared = true;
                     aplicarVolApp();
                     seek.setMax(m.getDuration());
@@ -2298,10 +2271,19 @@ public class MainActivity extends Activity {
                 }
             });
             mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                public void onCompletion(MediaPlayer m) { erroresSeguidos = 0; siguiente(true); }
+                public void onCompletion(MediaPlayer m) { if (miCarga != cargaN || !prepared) return; erroresSeguidos = 0; siguiente(true); }
             });
             mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-                public boolean onError(MediaPlayer m, int what, int extra) { saltarPorError(); return true; }
+                public boolean onError(MediaPlayer m, int what, int extra) {
+                    if (miCarga != cargaN) return true;   // error de una cancion vieja: no saltar
+                    // al cambiar rapido el reproductor a veces da un error falso: se reintenta 1 vez la MISMA antes de saltar
+                    if (reintentoPos != posEnOrden) {
+                        reintentoPos = posEnOrden;
+                        handler.postDelayed(new Runnable(){ public void run(){ try { if (miCarga == cargaN) cargarYReproducir(); } catch (Throwable e) {} } }, 350);
+                        return true;
+                    }
+                    saltarPorError(); return true;
+                }
             });
             mp.prepareAsync();
         } catch (Exception e) {
@@ -2328,20 +2310,33 @@ public class MainActivity extends Activity {
         else { pedirFoco(); mp.start(); pintarPlay(true); handler.post(actualizador); }
     }
 
+    private int cargaN = 0, reintentoPos = -1;
+    private boolean cargaPendiente = false;
+    private final Runnable cargaDiferida = new Runnable() { public void run() { if (cargaPendiente) { cargaPendiente = false; cargarYReproducir(); } } };
+    // cambio pedido por el usuario: se espera un momentito; si toca varias veces seguidas se carga SOLO la ultima
+    // (el radio no se traba abriendo y cerrando canciones a medias)
+    private void cargarPronto() {
+        cargaPendiente = true;
+        try { Song s = songs.get(order.get(posEnOrden)); txtTitle.setText(s.title); txtArtist.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "Desconocido"); } catch (Throwable e) {}
+        handler.removeCallbacks(cargaDiferida);
+        handler.postDelayed(cargaDiferida, 180);
+    }
     private void siguiente(boolean auto) {
         if (order.isEmpty()) return;
         if (repeat == 1 && auto) { if (mp != null) { mp.seekTo(0); mp.start(); } return; }   // Repite la misma
         if (posEnOrden < order.size() - 1) posEnOrden++;
         else posEnOrden = 0;   // termino la carpeta: vuelve a la primera y sigue sonando
         animDir = 1;
-        cargarYReproducir();
+        if (auto) cargarYReproducir(); else cargarPronto();
     }
 
     // historial de lo que de verdad sono: "anterior" vuelve a ESA cancion (aunque este en aleatorio)
     private final ArrayList<Song> historial = new ArrayList<Song>();
     private void anterior() {
         if (order.isEmpty()) return;
-        // atras = la cancion que sono antes (siempre cambia de cancion, no reinicia la misma)
+        // 1er toque: si la cancion ya va avanzada (mas de 3 s), vuelve al principio de la misma
+        try { if (!cargaPendiente && mp != null && prepared && mp.getCurrentPosition() > 3000) { mp.seekTo(0); try { if (analizador != null) analizador.saltoA(0); } catch (Throwable e) {} return; } } catch (Throwable e) {}
+        // 2do toque (o si recien empezo): la cancion que sono antes
         while (historial.size() >= 2) {
             historial.remove(historial.size() - 1);                 // la que suena ahora
             Song prev = historial.get(historial.size() - 1);
@@ -2350,13 +2345,13 @@ public class MainActivity extends Activity {
             if (p >= 0) {
                 historial.remove(historial.size() - 1);             // se vuelve a anotar al cargarla
                 posEnOrden = p; animDir = -1;
-                cargarYReproducir();
+                cargarPronto();
                 return;
             }
         }
         if (posEnOrden > 0) posEnOrden--; else posEnOrden = order.size() - 1;
         animDir = -1;
-        cargarYReproducir();
+        cargarPronto();
     }
 
     private int tickGuardar = 0;
@@ -4985,14 +4980,7 @@ public class MainActivity extends Activity {
                     synchronized (portadas) { bmp = portadas.get("l:" + n); }
                 }
                 if (bmp != null) th.setImageBitmap(bmp);
-                else {
-                    // sin caratula: una de colores inventada (como en el HTML)
-                    Song falsa = new Song(); 
-                    String clave = (tab == 0 ? "c:" + carpetas.get(i).name : "l:" + nombresListas.get(i));
-                    falsa.title = clave; falsa.artist = (tab == 0 ? carpetas.get(i).name : nombresListas.get(i)); falsa.path = "/" + (tab == 0 ? "Carpeta" : "Lista") + "/x";
-                    Bitmap g = miniGenerada(clave, falsa);
-                    if (g != null) th.setImageBitmap(g); else th.setImageDrawable(new ColorDrawable(0xFF262633));
-                }
+                else th.setImageDrawable(new ColorDrawable(0xFF262633));
             } else {
                 TextView t = (TextView) v.findViewById(R.id.rowTitle);
                 TextView a = (TextView) v.findViewById(R.id.rowArtist);
@@ -5001,31 +4989,17 @@ public class MainActivity extends Activity {
                     Song vid = videos.get(i);
                     t.setText(vid.title); a.setText("Video"); d.setText("");
                     t.setTextColor(0xFFF4F4F8);
-                    pintarIcoFila(v, 0xFF7AC0FF, "▶", false);
                 } else {
                     Song s = cancionesCarpeta.get(i);
                     t.setText(s.title); a.setText(s.artist != null && s.artist.length() > 0 ? s.artist : "");
                     d.setText(s.dur > 0 ? fmt(s.dur) : "");
-                    boolean suena = rutaActualCache != null && rutaActualCache.equals(s.path);
-                    t.setTextColor(suena ? accent : 0xFFF4F4F8);
-                    String ini = ""; try { String tt = (s.title != null ? s.title.trim() : ""); if (tt.length() > 0) ini = tt.substring(0, 1).toUpperCase(); } catch (Throwable e) {}
-                    pintarIcoFila(v, suena ? accent : paletaDe(s)[1], suena ? "▶" : ini, suena);
+                    t.setTextColor(rutaActualCache != null && rutaActualCache.equals(s.path) ? accent : 0xFFF4F4F8);
                 }
             }
             return v;
         }
     }
 
-    private void pintarIcoFila(View fila, int color, String txt, boolean fuerte) {
-        try {
-            TextView ico = (TextView) fila.findViewById(R.id.rowIco);
-            if (ico == null) return;
-            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-            gd.setColor(color); gd.setCornerRadius(8 * getResources().getDisplayMetrics().density);
-            ico.setBackgroundDrawable(gd);
-            ico.setText(txt);
-        } catch (Throwable e) {}
-    }
     // Portada de una lista de canciones (primera con carátula)
     private android.graphics.Bitmap portadaDe(ArrayList<Song> lista) {
         int lim = Math.min(lista.size(), 8);

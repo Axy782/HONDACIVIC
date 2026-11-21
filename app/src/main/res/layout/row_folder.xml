@@ -7,8 +7,7 @@
     android:paddingTop="16dp"
     android:paddingBottom="16dp"
     android:paddingLeft="14dp"
-    android:paddingRight="14dp"
-    android:background="@drawable/fila_lista">
+    android:paddingRight="14dp">
 
     <ImageView
         android:id="@+id/folThumb"

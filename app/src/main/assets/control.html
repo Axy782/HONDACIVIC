@@ -61,6 +61,9 @@ button:active{transform:scale(.93);filter:brightness(1.25)}
 .buscar input{flex:1;border:1px solid #2c2c3a;background:#1c1c26;color:#f4f4f8;border-radius:12px;padding:0 14px;height:48px;font-size:16px;outline:none}
 .lista{background:#1c1c26;border-radius:16px;overflow:hidden}
 .item{padding:12px 14px;border-top:1px solid #262632;display:flex;align-items:center;gap:8px}
+.item.suena{background:#2e2614;box-shadow:inset 4px 0 0 #FFB020;border-radius:10px}
+.item.suena .t{color:#FFB020}
+.item.suena .t:before{content:"\25B6  ";font-size:12px}
 .item:first-child{border-top:none}
 .item:active{background:#262633}
 .item .t{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -185,7 +188,7 @@ function pintar(d){
   $('brep').textContent = 'Repetir esta canción: ' + (d.repetir ? 'Sí' : 'No');
   if (!volEsperando) mostrarVol(d.volApp != null ? d.volApp : 100, false);
   actualCS = (d.c != null && d.c >= 0) ? { c: d.c, s: d.s, t: d.titulo || '', a: d.artista || '' } : null;
-  if (d.id !== ultimoId) { ultimoId = d.id; $('cov').style.backgroundImage = d.id ? 'url(/caratula?v=' + d.id + ')' : 'none'; }
+  if (d.id !== ultimoId) { ultimoId = d.id; $('cov').style.backgroundImage = d.id ? 'url(/caratula?v=' + d.id + ')' : 'none'; marcarSonando(); }
 }
 var volActual = 100, volEsperando = 0;
 function mostrarVol(v, animar){
@@ -222,6 +225,14 @@ $('prog').addEventListener('change', function(){
   pedir('/api/cmd?a=seek&ms=' + ms, function(d){ arrastrando = false; pintar(d); });
 });
 
+// sombrea en las listas la cancion que esta sonando en el radio
+function marcarSonando(){
+  var it = document.querySelectorAll('#lista .item[data-id]');
+  for (var i = 0; i < it.length; i++) {
+    var on = !!ultimoId && it[i].getAttribute('data-id') === ultimoId;
+    it[i].className = on ? 'item suena' : 'item';
+  }
+}
 function tocar(c, s, artista){
   pedir('/api/tocar?c=' + c + '&s=' + s + (artista ? '&artista=1' : ''), function(d){ pintar(d); aviso(artista ? 'Sonando todo el artista' : 'Sonando en el radio'); });
 }
@@ -230,7 +241,7 @@ function filasCanciones(arr, conArtista){
   var h = '';
   for (var i = 0; i < arr.length; i++) {
     var it = arr[i];
-    h += '<div class="item" onclick="tocar(' + it.c + ',' + it.s + ')"><div class="tx"><div class="t">' + esc(it.t) + '</div>' +
+    h += '<div class="item' + (it.id && it.id === ultimoId ? ' suena' : '') + '" data-id="' + esc(it.id || '') + '" onclick="tocar(' + it.c + ',' + it.s + ')"><div class="tx"><div class="t">' + esc(it.t) + '</div>' +
          (it.a ? '<div class="a">' + esc(it.a) + '</div>' : '') + '</div>' +
          (conArtista && it.a ? '<button class="mini" onclick="event.stopPropagation();tocar(' + it.c + ',' + it.s + ',1)">Todo el artista</button>' : '') +
          '<button class="mini" onclick="event.stopPropagation();opciones(' + it.c + ',' + it.s + ',this)" data-t="' + esc(it.t) + '" data-a="' + esc(it.a) + '">&#8943;</button></div>';
@@ -288,7 +299,7 @@ function pintarLista(){
             '<button class="mini rojo" onclick="borrarLista()">' + (n === 'Favoritas' ? 'Vaciar' : 'Borrar lista') + '</button></div>';
     if (!arr || !arr.length) h += '<div class="vacio">Lista vacía. Agrega canciones con el botón + en Carpetas o Buscar.</div>';
     else for (var i = 0; i < arr.length; i++) {
-      h += '<div class="item" onclick="tocarLista(' + arr[i].i + ')"><div class="tx"><div class="t">' + esc(arr[i].t) + '</div>' + (arr[i].a ? '<div class="a">' + esc(arr[i].a) + '</div>' : '') + '</div>' +
+      h += '<div class="item' + (arr[i].id && arr[i].id === ultimoId ? ' suena' : '') + '" data-id="' + esc(arr[i].id || '') + '" onclick="tocarLista(' + arr[i].i + ')"><div class="tx"><div class="t">' + esc(arr[i].t) + '</div>' + (arr[i].a ? '<div class="a">' + esc(arr[i].a) + '</div>' : '') + '</div>' +
            '<button class="mini rojo" onclick="event.stopPropagation();quitar(' + arr[i].i + ')">Quitar</button></div>';
     }
     $('lista').innerHTML = h;

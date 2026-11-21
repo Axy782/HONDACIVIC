@@ -14,6 +14,7 @@ public class MediaButtonReceiver extends BroadcastReceiver {
         final MainActivity a = MainActivity.activo;
         if (a == null) return;
         final int code = ke.getKeyCode();
-        a.runOnUiThread(new Runnable() { public void run() { a.manejarTeclaMedia(code); } });
+        final long down = ke.getDownTime();
+        a.runOnUiThread(new Runnable() { public void run() { a.manejarTeclaMedia(code, down, "sistema"); } });
     }
 }

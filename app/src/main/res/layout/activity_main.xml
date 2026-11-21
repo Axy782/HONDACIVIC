@@ -149,7 +149,7 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="15sp"
-            android:background="@drawable/boton_top"/>
+            android:background="#77000000"/>
         <Button
             android:id="@+id/btnVis"
             android:layout_width="wrap_content"
@@ -161,7 +161,7 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="13sp"
-            android:background="@drawable/boton_top"/>
+            android:background="#77000000"/>
         <Button
             android:id="@+id/btnAbrirLista"
             android:layout_width="wrap_content"
@@ -172,7 +172,7 @@
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="15sp"
-            android:background="@drawable/boton_top"/>
+            android:background="#77000000"/>
 
         </FrameLayout>
 
@@ -233,13 +233,13 @@
                                 android:shadowColor="#000000" android:shadowDx="0" android:shadowDy="1" android:shadowRadius="6"/>
                         </LinearLayout>
                         <Button android:id="@+id/btnFav" android:layout_width="42dp" android:layout_height="42dp"
-                            android:text="★" android:textSize="16sp" android:textColor="#FFFFFF" android:background="@drawable/boton_mini"/>
+                            android:text="★" android:textSize="16sp" android:textColor="#FFFFFF" android:background="#33FFFFFF"/>
                         <Button android:id="@+id/btnMasLista" android:layout_width="wrap_content" android:layout_height="42dp"
-                            android:text="+ Lista" android:textStyle="bold" android:textColor="#FFFFFF" android:background="@drawable/boton_mini" android:layout_marginLeft="6dp" android:textSize="12sp"/>
+                            android:text="+ Lista" android:textStyle="bold" android:textColor="#FFFFFF" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
                         <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="42dp"
-                            android:text="EQ" android:textColor="#FFFFFF" android:textStyle="bold" android:background="@drawable/boton_mini" android:layout_marginLeft="6dp" android:textSize="12sp"/>
+                            android:text="EQ" android:textColor="#FFFFFF" android:textStyle="bold" android:background="#33FFFFFF" android:layout_marginLeft="6dp" android:textSize="12sp"/>
                         <Button android:id="@+id/btnBorrarActual" android:layout_width="wrap_content" android:layout_height="42dp"
-                            android:text="Borrar" android:textSize="12sp" android:textStyle="bold" android:textColor="#FFFFFF" android:background="@drawable/boton_mini" android:layout_marginLeft="6dp"/>
+                            android:text="Borrar" android:textSize="12sp" android:textStyle="bold" android:textColor="#FFFFFF" android:background="#33FFFFFF" android:layout_marginLeft="6dp"/>
                     </LinearLayout>
 
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -345,7 +345,7 @@
             <TextView android:id="@+id/tituloAjustes" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                 android:layout_marginLeft="14dp" android:text="Configuraci&#243;n" android:textColor="@color/text" android:textSize="19sp" android:textStyle="bold"/>
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="v234" android:textColor="@color/muted" android:textSize="13sp"/>
+                android:text="v238" android:textColor="@color/muted" android:textSize="13sp"/>
         </LinearLayout>
 
         <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
